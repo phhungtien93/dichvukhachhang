@@ -792,12 +792,10 @@ export default function QuanLyDanhSach() {
             </div>
           </form> {/* <--- FORM ĐÓNG LẠI Ở ĐÂY ĐỂ CẮT ĐỨT ANIMATION GIẬT LAG */}
 
-          {/* THANH NÚT BẤM ĐƯỢC ĐẶT Ở NGOÀI CÙNG NÊN SẼ LUÔN BÁM CHẮC CHẮN DƯỚI ĐÁY */}
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] fade-in">
-            <div className="flex gap-3 max-w-md mx-auto">
+          {/* THANH NÚT BẤM LƯU HỒ SƠ (Được nâng lên bottom-16 để ngồi ngay trên thanh Menu) */}
+          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[50] fade-in">
+            <div className="flex gap-3">
               <button type="button" onClick={() => setViewMode('list')} className="w-1/3 bg-slate-100 text-slate-700 font-bold py-3.5 rounded-lg text-sm uppercase tracking-wider">HỦY</button>
-              
-              {/* Thuộc tính form="form-tao-moi" là điểm mấu chốt để nút ở ngoài gửi dữ liệu vào form ở trong */}
               <button type="submit" form="form-tao-moi" disabled={loading} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-lg shadow-lg flex justify-center items-center gap-2 text-sm uppercase tracking-wider">{loading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-paper-plane"></i>} LƯU HỒ SƠ</button>
             </div>
           </div>
