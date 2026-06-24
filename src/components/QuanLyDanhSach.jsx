@@ -50,14 +50,21 @@ const compressImage = async (file) => {
   });
 };
 
-// HÀM LẤY TỌA ĐỘ GPS (CÓ CHỐNG LỖI NẾU KHÁCH TỪ CHỐI QUYỀN)
+// HÀM LẤY TỌA ĐỘ GPS (ĐÃ ĐƯỢC TỐI ƯU CHO ĐIỆN THOẠI ĐI TUYẾN)
 const getCurrentLocation = () => {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null); // Nếu điện thoại đời quá cũ
+    if (!navigator.geolocation) return resolve(null);
     navigator.geolocation.getCurrentPosition(
       (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
-      (err) => { console.warn("Lỗi GPS:", err); resolve(null); }, // Bị từ chối quyền thì thôi, cho qua luôn
-      { enableHighAccuracy: true, timeout: 5000 } // Chờ tối đa 5 giây
+      (err) => { 
+        console.warn("Lỗi GPS:", err); 
+        resolve(null); 
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 15000,       // Tăng lên 15 giây để chip GPS kịp dò vệ tinh ngoài hiện trường
+        maximumAge: 30000     // Nếu điện thoại đã lấy vị trí cách đây dưới 30 giây thì dùng luôn cho nhanh
+      }
     );
   });
 };
