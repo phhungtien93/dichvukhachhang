@@ -760,10 +760,10 @@ export default function QuanLyDanhSach() {
                   activeTab === 'da_cat' ? 'fa-scissors' :
                   'fa-clock-rotate-left'
                 }`}></i>
-                {activeTab === 'cho_xac_minh' ? 'LẬP YÊU CẦU XÁC MINH' :
-                 activeTab === 'cho_cat' ? 'LẬP LỆNH CHỜ CẮT (NỢ)' :
-                 activeTab === 'da_cat' ? 'NHẬP CA ĐÃ CẮT THỰC TẾ' :
-                 'LẬP LỆNH THAY ĐỊNH KỲ'}
+                {activeTab === 'cho_xac_minh' ? 'TẠO MỚI KHÁCH HÀNG CHỜ XÁC MINH' :
+                 activeTab === 'cho_cat' ? 'TẠO MỚI KHÁCH HÀNG CHỜ CẮT ĐIỆN' :
+                 activeTab === 'da_cat' ? 'THÊM HỒ SƠ KHÁCH HÀNG ĐÃ CẮT ĐIỆN' :
+                 'THÊM HỒ SƠ KHÁCH HÀNG CHƯA THAY ĐỊNH KỲ'}
               </h2>
             </div>
             <div className="p-5 space-y-4">
