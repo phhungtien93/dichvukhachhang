@@ -299,10 +299,39 @@ export default function QuanLyDanhSach() {
 
   useEffect(() => {
     if (maPE.trim()) {
-      const existingKh = customers.find(kh => kh.ma_pe === maPE.trim().toUpperCase());
-      if (existingKh) { setTenKH(existingKh.ten_kh || ''); setDiaChi(existingKh.dia_chi || ''); setSoDienThoai(existingKh.so_dien_thoai || ''); } 
-      else { setTenKH(''); setDiaChi(''); setSoDienThoai(''); }
-    } else { setTenKH(''); setDiaChi(''); setSoDienThoai(''); }
+      const standardizedPE = maPE.trim().toUpperCase();
+      const existingKh = customers.find(kh => kh.ma_pe === standardizedPE);
+      
+      if (existingKh) {
+        // TRƯỜNG HỢP 1: Khớp mã PE cũ -> Tự động điền thông tin
+        setTenKH(existingKh.ten_kh || '');
+        setDiaChi(existingKh.dia_chi || '');
+        setSoDienThoai(existingKh.so_dien_thoai || '');
+      } else {
+        // TRƯỜNG HỢP 2: Không khớp mã nào trong hệ thống (Đang gõ mã mới hoặc gõ thêm ký tự)
+        
+        // Quét tìm xem thông tin hiện tại trên Form có trùng với bất kỳ KH nào trong DB không
+        const matchedAnyOldKh = customers.find(kh => 
+          kh.ten_kh === tenKH && 
+          kh.dia_chi === diaChi && 
+          kh.so_dien_thoai === soDienThoai
+        );
+
+        // Nếu Form đang chứa thông tin của một KH cũ, nhưng mã PE đang gõ đã khác mã của KH cũ đó
+        // Điều này chứng minh đây là "dữ liệu thừa" từ đợt tự điền trước -> Tiến hành xóa sạch
+        if (matchedAnyOldKh && matchedAnyOldKh.ma_pe !== standardizedPE) {
+          setTenKH('');
+          setDiaChi('');
+          setSoDienThoai('');
+        }
+        // Nếu không khớp với KH cũ nào (nghĩa là anh em đang tự gõ tay một KH mới) -> Tuyệt đối KHÔNG xóa
+      }
+    } else {
+      // TRƯỜNG HỢP 3: Xóa trắng hoàn toàn ô nhập mã PE -> Xóa sạch Form
+      setTenKH('');
+      setDiaChi('');
+      setSoDienThoai('');
+    }
   }, [maPE, customers]);
 
   const handleSoTienChange = (e) => {
@@ -497,7 +526,10 @@ export default function QuanLyDanhSach() {
     if (activeTab === 'hoan_tat') {
       const isDoneNgungHoi = kh.trang_thai === 'da_de_dien';
       const isDoneDinhKy = kh.da_thay_dinh_ky === true && kh.chua_thay_dinh_ky === false;
-      return matchSearch && (isDoneNgungHoi || (isDoneDinhKy && ['dang_su_dung','cho_xac_minh'].includes(kh.trang_thai)));
+      // Bổ sung: Các ca đã được Văn phòng Xác minh OK - Gạch nợ thành công trước khi cắt
+      const isDoneXacMinhGachNo = kh.trang_thai === 'dang_su_dung' && kh.da_thanh_toan === true;
+      
+      return matchSearch && (isDoneNgungHoi || isDoneXacMinhGachNo || (isDoneDinhKy && ['dang_su_dung','cho_xac_minh'].includes(kh.trang_thai)));
     }
     return false;
   }).sort((a, b) => {
