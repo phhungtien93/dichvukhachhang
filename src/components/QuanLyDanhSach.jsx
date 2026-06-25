@@ -144,6 +144,20 @@ export default function QuanLyDanhSach() {
     });
   }, []);
 
+  // TỰ ĐỘNG XIN QUYỀN GPS NGAY LẦN ĐẦU TIÊN ĐĂNG NHẬP VÀO APP
+  useEffect(() => {
+    if (session) {
+      // Chạy mồi một lệnh lấy GPS. Mục đích chỉ để gọi cái bảng xin quyền của điện thoại hiện lên.
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          () => { console.log("Hệ thống: Đã xin được quyền GPS thành công từ đầu."); },
+          (err) => { console.warn("Hệ thống: Người dùng chưa cấp quyền GPS lúc khởi động.", err); },
+          { timeout: 5000 } // Chỉ đợi 5s cho cái bảng hiện ra thôi, không cần lấy tọa độ thật
+        );
+      }
+    }
+  }, [session]);
+
   const fetchProfile = async (userId) => {
     const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
     if (!error && data) {
