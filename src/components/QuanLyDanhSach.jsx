@@ -741,7 +741,31 @@ export default function QuanLyDanhSach() {
         {viewMode === 'add' && (
           <>
           <form id="form-tao-moi" onSubmit={handleTaoMoi} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in mb-24">
-            <div className="bg-slate-50 px-5 py-4 border-b border-slate-200"><h2 className="font-bold text-slate-800 flex items-center gap-2"><i className="fa-solid fa-file-circle-plus text-blue-600"></i> Khởi Tạo Hồ Sơ Mới</h2></div>
+            {/* TIÊU ĐỀ FORM ĐỔI MÀU VÀ CHỮ TỰ ĐỘNG THEO TAB */}
+            <div className={`px-5 py-4 border-b transition-colors ${
+              activeTab === 'cho_xac_minh' ? 'bg-indigo-50 border-indigo-200' :
+              activeTab === 'cho_cat' ? 'bg-orange-50 border-orange-200' :
+              activeTab === 'da_cat' ? 'bg-red-50 border-red-200' :
+              'bg-amber-50 border-amber-200'
+            }`}>
+              <h2 className={`font-black flex items-center gap-2 uppercase tracking-wide text-sm ${
+                activeTab === 'cho_xac_minh' ? 'text-indigo-700' :
+                activeTab === 'cho_cat' ? 'text-orange-700' :
+                activeTab === 'da_cat' ? 'text-red-700' :
+                'text-amber-700'
+              }`}>
+                <i className={`fa-solid text-lg ${
+                  activeTab === 'cho_xac_minh' ? 'fa-user-clock' :
+                  activeTab === 'cho_cat' ? 'fa-triangle-exclamation' :
+                  activeTab === 'da_cat' ? 'fa-scissors' :
+                  'fa-clock-rotate-left'
+                }`}></i>
+                {activeTab === 'cho_xac_minh' ? 'LẬP YÊU CẦU XÁC MINH' :
+                 activeTab === 'cho_cat' ? 'LẬP LỆNH CHỜ CẮT (NỢ)' :
+                 activeTab === 'da_cat' ? 'NHẬP CA ĐÃ CẮT THỰC TẾ' :
+                 'LẬP LỆNH THAY ĐỊNH KỲ'}
+              </h2>
+            </div>
             <div className="p-5 space-y-4">
               <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mã số PE Khách hàng *</label><div className="relative"><i className="fa-solid fa-hashtag absolute left-3 top-3.5 text-slate-400"></i><input type="text" value={maPE} onChange={(e) => setMaPE(e.target.value.toUpperCase())} placeholder="VD: PB1207..." className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm font-mono font-bold uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-all" required /></div></div>
               <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Họ và tên Khách hàng *</label><div className="relative"><i className="fa-solid fa-user absolute left-3 top-3.5 text-slate-400"></i><input type="text" value={tenKH} onChange={(e) => setTenKH(e.target.value)} placeholder="Tên hiển thị công tơ..." className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" required /></div></div>
@@ -959,7 +983,7 @@ export default function QuanLyDanhSach() {
       </div>
 
       {/* NÚT THÊM MỚI ĐƯỢC ĐƯA RA VÙNG AN TOÀN (KHÔNG BỊ GIẬT KHI CHUYỂN TAB) */}
-      {viewMode === 'list' && (
+      {viewMode === 'list' && activeTab !== 'hoan_tat' && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md pointer-events-none z-[50]">
           <button onClick={() => { resetCustomerForm(); setViewMode('add'); }} className="absolute bottom-0 right-4 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-[0_4px_15px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-90 border-2 border-white pointer-events-auto transition-transform hover:scale-105 fade-in">
             <i className="fa-solid fa-plus text-2xl"></i>
