@@ -358,13 +358,35 @@ export default function QuanLyDanhSach() {
       
       let txtLyDo = currentLyDo === 'no_cuoc' ? 'Nợ tiền điện' : currentLyDo === 'kh_yeu_cau' ? 'KH yêu cầu' : 'Phát hiện bất thường';
 
+      // ĐÓNG BĂNG DỮ LIỆU: Tạo cụm Snapshot lưu vết thông tin tại thời điểm hiện tại
+    const snapshotData = `
+📌 [Thông tin chốt tại thời điểm này]
+- Khách hàng: ${tenKH.trim()}
+- Điện thoại: ${soDienThoai.trim() || 'Không có'}
+- Địa chỉ: ${diaChi.trim() || 'Không có'}
+- Ghi chú: ${ghiChu.trim() || 'Không có'}`;
+
+    // ÉP DỮ LIỆU ĐI THEO ĐÚNG TAB ĐANG ĐỨNG KHI BẤM THÊM MỚI
+    if (activeTab === 'dinh_ky') {
+      newData.chua_thay_dinh_ky = true;
+      if (!existingKh) newData.trang_thai = 'dang_su_dung';
+      logContent = `Khởi tạo: Nợ thay điện kế (Bởi ${profile?.ho_ten})${snapshotData}`;
+    } else {
+      newData.trang_thai = activeTab === 'hoan_tat' ? 'cho_xac_minh' : activeTab;
+      
+      const currentLyDo = activeTab === 'da_cat' ? lyDoNgung : 'no_cuoc';
+      newData.ly_do_ngung = currentLyDo; 
+      newData.so_tien_no = (currentLyDo === 'no_cuoc' && soTienNo) ? parseInt(soTienNo.replace(/\./g, ''), 10) : 0;
+      
+      let txtLyDo = currentLyDo === 'no_cuoc' ? 'Nợ tiền điện' : currentLyDo === 'kh_yeu_cau' ? 'KH yêu cầu' : 'Phát hiện bất thường';
+
       if (activeTab === 'da_cat') {
         newData.ngay_cat = new Date().toISOString();
-        logContent = `Khởi tạo: Đã cắt thực tế (Lý do: ${txtLyDo}${currentLyDo === 'no_cuoc' ? ` - ${newData.so_tien_no.toLocaleString('vi-VN')}đ` : ''}) - Lập bởi ${profile?.ho_ten}`;
+        logContent = `Khởi tạo: Đã cắt thực tế (Lý do: ${txtLyDo}${currentLyDo === 'no_cuoc' ? ` - ${newData.so_tien_no.toLocaleString('vi-VN')}đ` : ''}) - Lập bởi ${profile?.ho_ten}${snapshotData}`;
       } else if (activeTab === 'cho_cat') {
-        logContent = `Khởi tạo: Lệnh chờ cắt điện (Nợ cước: ${newData.so_tien_no.toLocaleString('vi-VN')}đ) - Lập bởi ${profile?.ho_ten}`;
+        logContent = `Khởi tạo: Lệnh chờ cắt điện (Nợ cước: ${newData.so_tien_no.toLocaleString('vi-VN')}đ) - Lập bởi ${profile?.ho_ten}${snapshotData}`;
       } else {
-        logContent = `Khởi tạo: Chờ VP xác minh thu tiền (Nợ cước: ${newData.so_tien_no.toLocaleString('vi-VN')}đ) - Lập bởi ${profile?.ho_ten}`;
+        logContent = `Khởi tạo: Chờ VP xác minh thu tiền (Nợ cước: ${newData.so_tien_no.toLocaleString('vi-VN')}đ) - Lập bởi ${profile?.ho_ten}${snapshotData}`;
       }
     }
 
