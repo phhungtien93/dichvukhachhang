@@ -50,21 +50,27 @@ const compressImage = async (file) => {
   });
 };
 
-// HÀM LẤY TỌA ĐỘ GPS (ĐÃ ĐƯỢC TỐI ƯU CHO ĐIỆN THOẠI ĐI TUYẾN)
+// HÀM LẤY TỌA ĐỘ GPS (CÓ BÁO LỖI CHI TIẾT ĐỂ BẮT BỆNH)
 const getCurrentLocation = () => {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
+    if (!navigator.geolocation) {
+      alert("Điện thoại của bạn quá cũ, không hỗ trợ GPS trên trình duyệt.");
+      return resolve(null);
+    }
+    
     navigator.geolocation.getCurrentPosition(
       (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
       (err) => { 
-        console.warn("Lỗi GPS:", err); 
+        // Bắt lỗi và thông báo bằng tiếng Việt
+        let errorMsg = "Lỗi không xác định.";
+        if (err.code === 1) errorMsg = "Bị TỪ CHỐI QUYỀN. (Hãy cấp quyền Vị trí cho Chrome/Safari trong Cài đặt máy).";
+        if (err.code === 2) errorMsg = "Không tìm thấy vệ tinh. (Bạn đang ở trong nhà kín? Hãy ra trời thoáng).";
+        if (err.code === 3) errorMsg = "Quá thời gian chờ (Mạng chậm hoặc sóng GPS quá yếu).";
+        
+        alert("LỖI ĐỊNH VỊ: " + errorMsg);
         resolve(null); 
       },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 15000,       // Tăng lên 15 giây để chip GPS kịp dò vệ tinh ngoài hiện trường
-        maximumAge: 30000     // Nếu điện thoại đã lấy vị trí cách đây dưới 30 giây thì dùng luôn cho nhanh
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
   });
 };
