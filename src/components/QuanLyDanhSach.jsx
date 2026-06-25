@@ -344,27 +344,8 @@ export default function QuanLyDanhSach() {
     let newData = { ma_pe: standardizedPE, ten_kh: tenKH.trim(), dia_chi: diaChi.trim(), so_dien_thoai: soDienThoai.trim(), ghi_chu: ghiChu.trim() };
     let logContent = '';
 
-    // ÉP DỮ LIỆU ĐI THEO ĐÚNG TAB ĐANG ĐỨNG KHI BẤM THÊM MỚI
-    if (activeTab === 'dinh_ky') {
-      newData.chua_thay_dinh_ky = true;
-      if (!existingKh) newData.trang_thai = 'dang_su_dung';
-      logContent = `Khởi tạo: Nợ thay điện kế (Bởi ${profile?.ho_ten})`;
-    } else {
-      newData.trang_thai = activeTab === 'hoan_tat' ? 'cho_xac_minh' : activeTab;
-      
-      const currentLyDo = activeTab === 'da_cat' ? lyDoNgung : 'no_cuoc';
-      newData.ly_do_ngung = currentLyDo; 
-      newData.so_tien_no = (currentLyDo === 'no_cuoc' && soTienNo) ? parseInt(soTienNo.replace(/\./g, ''), 10) : 0;
-      
-      let txtLyDo = currentLyDo === 'no_cuoc' ? 'Nợ tiền điện' : currentLyDo === 'kh_yeu_cau' ? 'KH yêu cầu' : 'Phát hiện bất thường';
-
-      // ĐÓNG BĂNG DỮ LIỆU: Tạo cụm Snapshot lưu vết thông tin tại thời điểm hiện tại
-    const snapshotData = `
-📌 [Thông tin chốt tại thời điểm này]
-- Khách hàng: ${tenKH.trim()}
-- Điện thoại: ${soDienThoai.trim() || 'Không có'}
-- Địa chỉ: ${diaChi.trim() || 'Không có'}
-- Ghi chú: ${ghiChu.trim() || 'Không có'}`;
+    // ĐÓNG BĂNG DỮ LIỆU: Tạo cụm Snapshot lưu vết thông tin tại thời điểm hiện tại
+    const snapshotData = `\n📌 [Thông tin chốt tại thời điểm này]\n- Khách hàng: ${tenKH.trim()}\n- Điện thoại: ${soDienThoai.trim() || 'Không có'}\n- Địa chỉ: ${diaChi.trim() || 'Không có'}\n- Ghi chú: ${ghiChu.trim() || 'Không có'}`;
 
     // ÉP DỮ LIỆU ĐI THEO ĐÚNG TAB ĐANG ĐỨNG KHI BẤM THÊM MỚI
     if (activeTab === 'dinh_ky') {
@@ -955,7 +936,7 @@ export default function QuanLyDanhSach() {
                            <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-lg">
                               <p className="text-[9px] font-bold text-slate-400 mb-0.5 flex items-center gap-1"><i className="fa-regular fa-calendar text-[8px]"></i>{new Date(log.created_at).toLocaleString('vi-VN')}</p>
                               <p className="text-xs font-black text-slate-700">{log.hanh_dong}</p>
-                              <p className="text-xs text-slate-500 leading-normal mt-0.5">{log.noi_dung}</p>
+                              <p className="text-xs text-slate-500 leading-relaxed mt-1 whitespace-pre-wrap bg-white/50 p-2 rounded border border-slate-100">{log.noi_dung}</p>
                               {log.image_url && (
                                 <div 
                                   onClick={() => setPreviewImage(log.image_url)}
