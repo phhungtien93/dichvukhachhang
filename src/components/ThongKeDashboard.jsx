@@ -151,7 +151,7 @@ export default function ThongKeDashboard() {
 
         <div className="bg-gradient-to-br from-blue-50 to-cyan-100 p-4 rounded-xl border border-blue-200 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden group">
           <i className="fa-solid fa-sack-dollar text-blue-500 text-2xl mb-1 group-hover:scale-110 transition-transform"></i>
-          <span className="text-2xl font-black text-blue-700">{tongQuan.tienThu > 0 ? (tongQuan.tienThu / 1000000).toFixed(1) + 'M' : '0'}</span>
+          <span className="text-2xl font-black text-blue-700">{tongQuan.tienThu > 0 ? tongQuan.tienThu.toLocaleString('vi-VN') : '0'}</span>
           <span className="text-[10px] font-bold text-blue-600 uppercase mt-1">Gạch Nợ (VNĐ)</span>
         </div>
       </div>
@@ -182,7 +182,7 @@ export default function ThongKeDashboard() {
                   <td className="px-2 py-3 text-center font-semibold text-slate-600">{nv.caDong}</td>
                   <td className="px-2 py-3 text-center font-semibold text-slate-600">{nv.caTroNgai}</td>
                   <td className="px-3 py-3 text-right font-mono font-semibold text-blue-600">
-                    {nv.tienThu > 0 ? `${(nv.tienThu / 1000000).toFixed(1)}M` : '-'}
+                    {nv.tienThu > 0 ? `${nv.tienThu.toLocaleString('vi-VN')}đ` : '-'}
                   </td>
                 </tr>
               )) : (
