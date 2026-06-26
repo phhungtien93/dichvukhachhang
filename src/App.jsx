@@ -27,6 +27,7 @@ function App() {
       
       {/* NỘI DUNG CHÍNH */}
       <div className="flex-1 overflow-y-auto pb-28 w-full h-full">
+        {activeTab === 'phancong' && <PhanCongDashboard />
         {activeTab === 'danhsach' && <QuanLyDanhSach />}
         {activeTab === 'thongke' && <ThongKeDashboard />}
       </div>
@@ -35,6 +36,14 @@ function App() {
       {session && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-x border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] rounded-t-xl fade-in">
           <div className="flex justify-around items-center h-16">
+
+            <button 
+              onClick={() => setActiveTab('phancong')} 
+              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'phancong' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <i className={`text-xl mb-1 ${activeTab === 'phancong' ? 'fa-solid fa-users-gear' : 'fa-solid fa-users'}`}></i>
+              <span className="text-[10px] font-bold uppercase tracking-wide">Phân Công</span>
+            </button>
             
             <button 
               id="btn-tab-dieu-hanh"
