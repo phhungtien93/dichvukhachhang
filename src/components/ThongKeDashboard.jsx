@@ -57,9 +57,9 @@ export default function ThongKeDashboard() {
     const noiDung = log.noi_dung || '';
 
     // THUẬT TOÁN TÌM TÊN NHÂN VIÊN: 
-    // Quét tìm chữ "(Bởi: Tên)" hoặc "- Lập bởi Tên" trong nội dung log
+    // Quét tìm chữ "(Bởi: Tên)", "(Bởi Tên)" hoặc "- Lập bởi Tên" trong nội dung log
     let nhanVien = 'Không xác định';
-    const nameMatch = noiDung.match(/(?:\(Bởi:\s*|-\s*Lập bởi\s*)([^)\n]+)/);
+    const nameMatch = noiDung.match(/(?:\(Bởi:?\s*|-\s*Lập bởi\s*)([^)\n]+)/);
     if (nameMatch && nameMatch[1]) {
       nhanVien = nameMatch[1].trim();
     }
