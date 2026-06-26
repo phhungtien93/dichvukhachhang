@@ -5,12 +5,12 @@ import { toast } from 'react-hot-toast';
 export default function ThongKeDashboard() {
   // Lấy ngày hiện tại mặc định
   const today = new Date();
-  // Điều chỉnh múi giờ (Tránh lỗi nhảy ngày do lệch múi giờ GMT+7)
   const tzOffset = today.getTimezoneOffset() * 60000;
   const todayStr = new Date(today.getTime() - tzOffset).toISOString().split('T')[0];
   
-  const [tuNgay, setTuNgay] = useState(todayStr);
-  const [denNgay, setDenNgay] = useState(todayStr);
+  // Khởi tạo: Ưu tiên moi trong trí nhớ (localStorage) ra trước, nếu không có mới dùng ngày hiện tại
+  const [tuNgay, setTuNgay] = useState(() => localStorage.getItem('evn_tk_tu_ngay') || todayStr);
+  const [denNgay, setDenNgay] = useState(() => localStorage.getItem('evn_tk_den_ngay') || todayStr);
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState([]);
 
@@ -39,8 +39,12 @@ export default function ThongKeDashboard() {
     }
   };
 
-  // Tự động chạy lại khi người dùng đổi ngày
+  // Tự động chạy lại & Lưu vào trí nhớ trình duyệt khi người dùng đổi ngày
   useEffect(() => {
+    // Lưu lại lựa chọn của người dùng vào localStorage
+    if (tuNgay) localStorage.setItem('evn_tk_tu_ngay', tuNgay);
+    if (denNgay) localStorage.setItem('evn_tk_den_ngay', denNgay);
+
     if (tuNgay && denNgay) {
       fetchThongKe();
     }
