@@ -477,7 +477,9 @@ export default function QuanLyDanhSach() {
     switch(actionModal.type) {
       case 'vp_xac_minh_ok':
         updateData = { trang_thai: 'dang_su_dung', so_tien_no: 0, da_thanh_toan: true, ngay_thanh_toan: isoDate };
-        logAction = 'Xác minh: OK'; logContent = `Đã thu tiền - Gạch nợ (Bởi ${profile?.ho_ten})`; break;
+        logAction = 'Xác minh: OK'; 
+        logContent = `Đã thu tiền - Gạch nợ: ${customerInfo?.so_tien_no?.toLocaleString('vi-VN')}đ (Bởi ${profile?.ho_ten})`; 
+        break;
       case 'vp_yeu_cau_cat':
         updateData = { trang_thai: 'cho_cat' }; logAction = 'Xác minh: Thất bại'; logContent = `Từ chối hoãn. Chỉ thị cắt điện (Bởi ${profile?.ho_ten})`; break;
       
@@ -503,7 +505,10 @@ export default function QuanLyDanhSach() {
       case 'da_de_dien':
         updateData = { trang_thai: 'da_de_dien', ngay_de_dien: isoDate }; logAction = 'Đóng điện'; logContent = `Khôi phục điện thành công (Bởi: ${profile?.ho_ten})`; break;
       case 'thu_tien_no':
-        updateData = { so_tien_no: 0, da_thanh_toan: true, ngay_thanh_toan: isoDate }; logAction = 'Xóa nợ'; logContent = `Đã đóng tiền cước (Bởi: ${profile?.ho_ten})`; break;
+        updateData = { so_tien_no: 0, da_thanh_toan: true, ngay_thanh_toan: isoDate }; 
+        logAction = 'Xóa nợ'; 
+        logContent = `Đã đóng tiền cước: ${customerInfo?.so_tien_no?.toLocaleString('vi-VN')}đ (Bởi: ${profile?.ho_ten})`; 
+        break;
       case 'thay_dinh_ky':
         updateData = { chua_thay_dinh_ky: false, da_thay_dinh_ky: true, ngay_thay_dinh_ky: isoDate }; logAction = 'Thay điện kế'; logContent = `Hoàn tất thay ĐK định kỳ (Bởi: ${profile?.ho_ten})`; break;
       default: break;
