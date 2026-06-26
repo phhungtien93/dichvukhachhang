@@ -27,7 +27,7 @@ function App() {
       
       {/* NỘI DUNG CHÍNH */}
       <div className="flex-1 overflow-y-auto pb-28 w-full h-full">
-        {activeTab === 'phancong' && <PhanCongDashboard />
+        {activeTab === 'phancong' && <PhanCongDashboard />}
         {activeTab === 'danhsach' && <QuanLyDanhSach />}
         {activeTab === 'thongke' && <ThongKeDashboard />}
       </div>
