@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import QuanLyDanhSach from './components/QuanLyDanhSach';
 import ThongKeDashboard from './components/ThongKeDashboard';
+import PhanCongDashboard from './components/PhanCongDashboard';
 import { Toaster } from 'react-hot-toast';
 import { supabase } from './supabase'; // Bổ sung thư viện kết nối
 
