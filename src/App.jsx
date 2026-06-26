@@ -36,6 +36,7 @@ function App() {
           <div className="flex justify-around items-center h-16">
             
             <button 
+              id="btn-tab-dieu-hanh"
               onClick={() => setActiveTab('danhsach')} 
               className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
             >
