@@ -340,6 +340,27 @@ export default function QuanLyDanhSach() {
     setSoTienNo(new Intl.NumberFormat('vi-VN').format(rawValue));
   };
 
+  // BỘ THU PHÁT TÍN HIỆU DRILL-DOWN: Nhận lệnh kéo hồ sơ từ Tab Thống Kê sang
+  useEffect(() => {
+    const handleDrillDownEvent = () => {
+      const jumpId = localStorage.getItem('evn_jump_to_customer');
+      if (jumpId && customers.length > 0) {
+        const targetKh = customers.find(kh => kh.id === jumpId);
+        if (targetKh) {
+          loadToProcess(targetKh); // Ép mở thẳng màn hình Timeline điều khiển của KH này
+          localStorage.removeItem('evn_jump_to_customer'); // Xóa dấu vết bộ nhớ nháp
+        } else {
+          toast.error('Hồ sơ này đã cũ, nằm ngoài phạm vi 7 ngày điều hành.');
+          localStorage.removeItem('evn_jump_to_customer');
+        }
+      }
+    };
+
+    window.addEventListener('evn_trigger_jump', handleDrillDownEvent);
+    handleDrillDownEvent(); // Quét đón đầu nếu component hiển thị ngầm bằng CSS
+    return () => window.removeEventListener('evn_trigger_jump', handleDrillDownEvent);
+  }, [customers]);
+  
   const resetCustomerForm = () => {
     setCurrentId(null); setCustomerInfo(null);
     setMaPE(''); setTenKH(''); setDiaChi(''); setSoDienThoai(''); setSoTienNo(''); setGhiChu('');
