@@ -3,12 +3,12 @@
   "name": "Điện Lực Châu Phú - Điều Hành Hiện Trường",
   "icons": [
     {
-      "src": "/vite.svg",
+      "src": "/logo.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://img.icons8.com/fluency/512/bolt.png",
+      "src": "/logo.png",
       "type": "image/png",
       "sizes": "512x512"
     }
