@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
+import * as XLSX from 'xlsx'; // Bổ sung thư viện đọc Excel
 
 // Danh sách đội thợ giả định (Bạn có thể thay đổi tên thực tế của đơn vị)
 const DANH_SACH_THO = ['Anh A', 'Anh B', 'Anh C', 'Anh D'];
@@ -12,6 +13,60 @@ export default function PhanCongDashboard() {
   // State điều khiển Giao diện
   const [activeWorkerCart, setActiveWorkerCart] = useState(null); // Giỏ của thợ nào đang được mở ra xem chi tiết
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]); // Mảng chứa ID các ca lẻ muốn chuyển cho người khác
+
+  // ---------------- BỔ SUNG LÕI ĐỌC EXCEL ----------------
+  const fileInputRef = useRef(null);
+
+  const handleImportExcel = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0]; // Lấy sheet đầu tiên
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        // Chuẩn hóa dữ liệu từ cột Excel sang cột trong Database
+        const danhSachNhap = jsonData.map(row => ({
+          ma_pe: row['MÃ PE'] || row['MA_PE'] || row['Mã khách hàng'] || '',
+          ten_kh: row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '',
+          dia_chi: row['ĐỊA CHỈ'] || row['DIA_CHI'] || row['Địa chỉ'] || '',
+          so_dien_thoai: row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || '',
+          so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
+          trang_thai: 'cho_xu_ly', // Mặc định tất cả ca mới nạp lên là Chờ Xử Lý
+          nguoi_phu_trach: null    // Chưa ai được giao
+        })).filter(item => item.ma_pe); // Lọc bỏ các dòng trống không có Mã PE
+
+        if (danhSachNhap.length === 0) {
+          toast.error('File Excel trống hoặc sai tên cột!');
+          return;
+        }
+
+        const toastId = toast.loading(`Đang nạp ${danhSachNhap.length} hồ sơ lên máy chủ...`);
+        
+        // Đẩy hàng loạt vào Supabase
+        const { error } = await supabase.from('customers').insert(danhSachNhap);
+        if (error) throw error;
+
+        toast.success(`Đã nạp thành công ${danhSachNhap.length} hồ sơ!`, { id: toastId });
+        fetchDanhSach(); // Tự động làm mới lại danh sách trên màn hình
+      } catch (error) {
+        console.error(error);
+        toast.error('Có lỗi xảy ra khi đọc file Excel!');
+      } finally {
+        setLoading(false);
+        e.target.value = ''; // Xóa rác trong input để có thể nạp file khác
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  // -------------------------------------------------------
 
   // Tải toàn bộ danh sách khách hàng (chưa xử lý xong)
   const fetchDanhSach = async () => {
@@ -127,9 +182,24 @@ export default function PhanCongDashboard() {
           <h2 className="font-black text-lg text-slate-800 tracking-tight">ĐIỀU PHỐI <span className="text-blue-600">LỘ TRÌNH</span></h2>
           <p className="text-[10px] text-slate-500 font-bold uppercase">Tổng: {caChuaGiao.length} ca chưa phân công</p>
         </div>
-        <button onClick={fetchDanhSach} className="bg-slate-100 p-2 rounded-full text-slate-600 hover:bg-blue-100 hover:text-blue-600">
-          <i className={`fa-solid fa-rotate ${loading ? 'animate-spin' : ''}`}></i>
-        </button>
+        <div className="flex gap-2">
+          {/* Cửa hút file ẩn */}
+          <input 
+            type="file" 
+            accept=".xlsx, .xls" 
+            ref={fileInputRef} 
+            onChange={handleImportExcel} 
+            className="hidden" 
+          />
+          {/* Nút bấm để gọi cửa hút file */}
+          <button onClick={() => fileInputRef.current.click()} disabled={loading} className="bg-emerald-100 p-2 rounded-full text-emerald-600 hover:bg-emerald-200 hover:text-emerald-700 shadow-sm border border-emerald-200">
+            <i className="fa-solid fa-file-excel"></i>
+          </button>
+
+          <button onClick={fetchDanhSach} disabled={loading} className="bg-slate-100 p-2 rounded-full text-slate-600 hover:bg-blue-100 hover:text-blue-600 shadow-sm border border-slate-200">
+            <i className={`fa-solid fa-rotate ${loading ? 'animate-spin' : ''}`}></i>
+          </button>
+        </div>
       </div>
 
       {/* KHU VỰC 1: KHO VIỆC (CHƯA GIAO) */}
