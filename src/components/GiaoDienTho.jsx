@@ -31,24 +31,23 @@ export default function GiaoDienTho() {
     fetchData();
   }, [thoHienTai]);
 
-  // HÀM XỬ LÝ 4 KỊCH BẢN
+  // HÀM XỬ LÝ 4 KỊCH BẢN (ĐÃ TÍCH HỢP CẦU NỐI SANG TAB ĐIỀU HÀNH)
   const handleXuLyKichBan = async (ca, kichBan, trangThaiMoi) => {
     let ghiChu = '';
     
-    // Nếu là kịch bản 3 (Khách hẹn), bắt buộc nhập giờ
     if (kichBan === 'HẸN LẠI') {
       ghiChu = prompt('Nhập thời gian/lý do khách hẹn lại (VD: 17h chiều mai đóng):');
-      if (ghiChu === null) return; // Bấm Cancel thì hủy thao tác
+      if (ghiChu === null) return; 
     }
 
     const toastId = toast.loading(`Đang xử lý kịch bản: ${kichBan}...`);
     try {
-      // 1. Chuyển trạng thái ca ở bảng danh sách gốc
+      // 1. Cập nhật trạng thái bên luồng ĐỐC THU
       await supabase.from('danh_sach_doc_thu')
         .update({ trang_thai_hien_tai: trangThaiMoi })
         .eq('id', ca.id);
       
-      // 2. Ghi dấu vết vào Hộp đen vĩnh viễn
+      // 2. Ghi dấu vết vào Hộp đen Đốc thu
       await supabase.from('nhat_ky_doc_thu').insert([{
         doc_thu_id: ca.id,
         ma_pe: ca.ma_pe,
@@ -58,8 +57,50 @@ export default function GiaoDienTho() {
         ghi_chu: ghiChu
       }]);
 
+      // 3. CẦU NỐI ĐỒNG BỘ: Bắn hồ sơ sang luồng ĐIỀU HÀNH NGƯNG HƠI (Bảng customers)
+      if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien') {
+        
+        // Dịch mã trạng thái để Tab Điều Hành hiểu được
+        const trangThaiDich = trangThaiMoi === 'da_chuyen_xac_minh' ? 'cho_xac_minh' : 'cho_cat';
+        
+        // Quét xem bên Điều Hành đã có hồ sơ KH này chưa (tránh tạo 2 dòng trùng mã PE)
+        const { data: checkKh } = await supabase.from('customers').select('id').eq('ma_pe', ca.ma_pe).single();
+
+        const payloadCustomer = {
+          ma_pe: ca.ma_pe,
+          ten_kh: ca.ten_kh,
+          dia_chi: ca.dia_chi,
+          so_dien_thoai: ca.so_dien_thoai || '',
+          so_tien_no: ca.so_tien || 0,
+          ly_do_ngung: 'no_cuoc',
+          trang_thai: trangThaiDich,
+          ghi_chu: `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
+        };
+
+        let newCustomerId = null;
+
+        if (checkKh) {
+          // Nếu có rồi thì Cập nhật trạng thái
+          await supabase.from('customers').update(payloadCustomer).eq('id', checkKh.id);
+          newCustomerId = checkKh.id;
+        } else {
+          // Nếu chưa có thì Insert mới
+          const { data: newKh } = await supabase.from('customers').insert([payloadCustomer]).select();
+          if (newKh && newKh.length > 0) newCustomerId = newKh[0].id;
+        }
+
+        // Bắn luôn Log Lịch sử sang bên Điều hành cho Đội trưởng nắm rõ
+        if (newCustomerId) {
+          await supabase.from('suspension_logs').insert([{
+            customer_id: newCustomerId,
+            hanh_dong: 'Chuyển lệnh tự động',
+            noi_dung: `Đội Đốc Thu (${thoHienTai}) báo về: Khách ${kichBan}. Yêu cầu xử lý tiếp!`
+          }]);
+        }
+      }
+
       toast.success(`Đã hoàn tất: ${kichBan}`, { id: toastId });
-      fetchData(); // Tải lại màn hình để ca đó biến mất (nếu xong) hoặc đổi màu
+      fetchData(); 
     } catch (error) {
       toast.error('Có lỗi hệ thống!', { id: toastId });
     }
