@@ -181,18 +181,33 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // === THAY THẾ TOÀN BỘ KHỐI LOGIC KHO VIỆC BẰNG ĐOẠN NÀY ===
+  // === LOGIC PHÂN LOẠI THỜI GIAN VÀ KHO VIỆC ===
   const todayMidnight = new Date();
   todayMidnight.setHours(0, 0, 0, 0); // Mốc 00:00 ngày hôm nay
 
-  // 1. Phân loại Hàng tồn đọng từ hôm qua chuyển sang (Chỉ lấy các ca tạo trước 00:00 hôm nay)
-  const tonDongHenLai = danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai' && new Date(c.created_at) < todayMidnight);
-  const tonDongChuaLam = danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly' && new Date(c.created_at) < todayMidnight);
+  // Phân tách tệp dữ liệu rạch ròi ngay từ đầu (Dùng cột ngay_nap_du_lieu)
+  const caHomNay = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) >= todayMidnight);
+  const caTonDong = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight);
+
+  // 1. Dành cho Khối TỒN ĐỌNG (Lấy từ caTonDong)
+  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai');
+  const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Phân loại việc của ngày hôm nay (Đã đẩy Khách Hẹn cho văn phòng quản lý nên tính là xong với thợ)
+  // 2. Dành cho Khối TỔNG QUAN (Vá lỗi đếm trùng hàng tồn)
+  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai').length;
+  const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
+  // Riêng Đã thu / Đã cắt: Đếm TOÀN BỘ. Vì bất cứ ca nào làm xong mà chưa bị khóa phiên thì chắc chắn là do HÔM NAY làm.
+  const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
+  const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
+
+  const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
+    ? caHomNay.filter(c => c.trang_thai_hien_tai === overviewTab) 
+    : danhSach.filter(c => c.trang_thai_hien_tai === overviewTab);
+
+  // 3. Phân loại Giỏ Việc Thợ
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
-  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai) && new Date(c.created_at) >= todayMidnight);
+  const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
   const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
@@ -286,7 +301,7 @@ export default function PhanCongDashboard() {
                 >
                   <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-orange-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').length}</div>
+                    <div className="font-black text-2xl text-orange-700 mb-1">{demHenLaiHomNay}</div>
                     <p className="text-[10px] font-black text-orange-800 uppercase tracking-wide">Khách hẹn lại</p>
                     <p className="text-[9px] text-orange-600 mt-0.5 font-bold">Cần nhắc đi thu</p>
                   </div>
@@ -301,7 +316,7 @@ export default function PhanCongDashboard() {
                 >
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-emerald-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length}</div>
+                    <div className="font-black text-2xl text-emerald-700 mb-1">{demDaThu}</div>
                     <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
                     <p className="text-[9px] text-emerald-600 mt-0.5 font-bold">Chờ VP đối soát</p>
                   </div>
@@ -316,7 +331,7 @@ export default function PhanCongDashboard() {
                 >
                   <div className="absolute -right-2 -top-2 text-red-200/50 text-4xl"><i className="fa-solid fa-scissors"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-red-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length}</div>
+                    <div className="font-black text-2xl text-red-700 mb-1">{demDaCat}</div>
                     <p className="text-[10px] font-black text-red-800 uppercase tracking-wide">Đã cắt điện</p>
                     <p className="text-[9px] text-red-600 mt-0.5 font-bold">Chuyển ngưng hơi</p>
                   </div>
@@ -331,7 +346,7 @@ export default function PhanCongDashboard() {
                 >
                   <div className="absolute -right-2 -top-2 text-blue-200/50 text-4xl"><i className="fa-solid fa-file-circle-question"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-blue-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length}</div>
+                    <div className="font-black text-2xl text-blue-700 mb-1">{demChuaXuHomNay}</div>
                     <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
                     <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thực thi</p>
                   </div>
@@ -356,10 +371,10 @@ export default function PhanCongDashboard() {
                 </p>
                 
                 <div className="space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
-                  {danhSach.filter(c => c.trang_thai_hien_tai === overviewTab).length === 0 ? (
+                  {danhSachHienThiTongQuan.length === 0 ? (
                     <p className="text-center text-slate-400 text-[10px] italic py-3 bg-white rounded-lg border border-slate-100">Hiện tại chưa có dữ liệu...</p>
                   ) : (
-                    danhSach.filter(c => c.trang_thai_hien_tai === overviewTab).map(c => (
+                    danhSachHienThiTongQuan.map(c => (
                       <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${
                         overviewTab === 'hen_lai' ? 'border-orange-100' : 
                         overviewTab === 'da_thu' ? 'border-emerald-100' :
