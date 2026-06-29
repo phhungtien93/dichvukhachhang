@@ -27,7 +27,10 @@ export default function GiaoDienTho() {
         .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
       
       if (error) throw error;
-      setDanhSachCa(data || []);
+      
+      // SỬA LỖI TẠI ĐÂY: Đổi setDanhSachCa thành setDsCa cho khớp với khai báo useState ở trên
+      setDsCa(data || []); 
+      
     } catch (error) {
       console.error("Chi tiết lỗi Supabase:", error);
       // Hiển thị thẳng lỗi tiếng Anh của DB ra màn hình để bắt bệnh
