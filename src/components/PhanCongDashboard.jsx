@@ -40,11 +40,11 @@ export default function PhanCongDashboard() {
       const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
       setDanhMucTienTo(tienToData || []);
 
-      // Tải danh sách đốc thu (Bổ sung thêm da_thu để đếm ở Tổng quan)
+      // Tải danh sách đốc thu (Nạp thêm cả ca Cắt điện và Xác minh để đếm đủ 4 thẻ)
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu']);
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh']);
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
@@ -189,9 +189,10 @@ export default function PhanCongDashboard() {
   const tonDongChuaLam = danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly' && new Date(c.created_at) < todayMidnight);
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Phân loại việc của ngày hôm nay (Excel mới nạp hoặc ca được tạo trong ngày)
-  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu' && new Date(c.created_at) >= todayMidnight);
-  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu');
+  // 2. Phân loại việc của ngày hôm nay (Loại bỏ tất cả các ca Đã thu, Đã cắt, Đã xác minh khỏi kho việc)
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'];
+  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai) && new Date(c.created_at) >= todayMidnight);
+  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
@@ -275,13 +276,11 @@ export default function PhanCongDashboard() {
             <div className="p-3 border-t border-blue-100 bg-slate-50 space-y-3 shadow-inner">
               <div className="grid grid-cols-2 gap-3">
                 
-                {/* THẺ 1: KHÁCH HẸN LẠI - Bấm để chọn tab */}
+                {/* THẺ 1: KHÁCH HẸN LẠI (CAM) */}
                 <div 
                   onClick={() => setOverviewTab('hen_lai')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'hen_lai' 
-                      ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' 
-                      : 'bg-orange-50 border-orange-200 opacity-60'
+                    overviewTab === 'hen_lai' ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' : 'bg-orange-50 border-orange-200 opacity-60'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
@@ -292,20 +291,48 @@ export default function PhanCongDashboard() {
                   </div>
                 </div>
 
-                {/* THẺ 2: ĐÃ THU TIỀN - Bấm để chọn tab */}
+                {/* THẺ 2: ĐÃ THU TIỀN (XANH NGỌC) */}
                 <div 
                   onClick={() => setOverviewTab('da_thu')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'da_thu' 
-                      ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' 
-                      : 'bg-emerald-50 border-emerald-200 opacity-60'
+                    overviewTab === 'da_thu' ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' : 'bg-emerald-50 border-emerald-200 opacity-60'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
                     <div className="font-black text-2xl text-emerald-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length}</div>
                     <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
-                    <p className="text-[9px] text-emerald-600 mt-0.5 font-bold">Chờ văn phòng đối soát</p>
+                    <p className="text-[9px] text-emerald-600 mt-0.5 font-bold">Chờ VP đối soát</p>
+                  </div>
+                </div>
+
+                {/* THẺ 3: ĐÃ CẮT ĐIỆN (ĐỎ) */}
+                <div 
+                  onClick={() => setOverviewTab('da_chuyen_cat_dien')}
+                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
+                    overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-100/70 border-red-400 ring-2 ring-red-400 shadow-md scale-[1.02]' : 'bg-red-50 border-red-200 opacity-60'
+                  }`}
+                >
+                  <div className="absolute -right-2 -top-2 text-red-200/50 text-4xl"><i className="fa-solid fa-scissors"></i></div>
+                  <div className="relative z-10">
+                    <div className="font-black text-2xl text-red-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length}</div>
+                    <p className="text-[10px] font-black text-red-800 uppercase tracking-wide">Đã cắt điện</p>
+                    <p className="text-[9px] text-red-600 mt-0.5 font-bold">Chuyển ngưng hơi</p>
+                  </div>
+                </div>
+
+                {/* THẺ 4: CHƯA THỰC HIỆN (XANH DƯƠNG) */}
+                <div 
+                  onClick={() => setOverviewTab('chua_xu_ly')}
+                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
+                    overviewTab === 'chua_xu_ly' ? 'bg-blue-100/70 border-blue-400 ring-2 ring-blue-400 shadow-md scale-[1.02]' : 'bg-blue-50 border-blue-200 opacity-60'
+                  }`}
+                >
+                  <div className="absolute -right-2 -top-2 text-blue-200/50 text-4xl"><i className="fa-solid fa-file-circle-question"></i></div>
+                  <div className="relative z-10">
+                    <div className="font-black text-2xl text-blue-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length}</div>
+                    <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
+                    <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thực thi</p>
                   </div>
                 </div>
               </div>
@@ -313,8 +340,18 @@ export default function PhanCongDashboard() {
               {/* BẢNG HIỂN THỊ CHI TIẾT DANH SÁCH ĐỘNG THEO TAB */}
               <div className="mt-3 border-t border-slate-200 pt-3">
                 <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
-                  <i className={`fa-solid ${overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 'fa-money-bill-wave text-emerald-500'}`}></i> 
-                  Chi tiết: {overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 'Danh sách ca thợ đã thu xong'}
+                  <i className={`fa-solid ${
+                    overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 
+                    overviewTab === 'da_thu' ? 'fa-money-bill-wave text-emerald-500' :
+                    overviewTab === 'da_chuyen_cat_dien' ? 'fa-scissors text-red-500' :
+                    'fa-file-circle-question text-blue-500'
+                  }`}></i> 
+                  Chi tiết: {
+                    overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 
+                    overviewTab === 'da_thu' ? 'Danh sách ca thợ đã thu xong' :
+                    overviewTab === 'da_chuyen_cat_dien' ? 'Danh sách khách hàng đã cắt điện' :
+                    'Danh sách hồ sơ chưa thực hiện'
+                  }
                 </p>
                 
                 <div className="space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
@@ -322,12 +359,22 @@ export default function PhanCongDashboard() {
                     <p className="text-center text-slate-400 text-[10px] italic py-3 bg-white rounded-lg border border-slate-100">Hiện tại chưa có dữ liệu...</p>
                   ) : (
                     danhSach.filter(c => c.trang_thai_hien_tai === overviewTab).map(c => (
-                      <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${overviewTab === 'hen_lai' ? 'border-orange-100' : 'border-emerald-100'}`}>
+                      <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${
+                        overviewTab === 'hen_lai' ? 'border-orange-100' : 
+                        overviewTab === 'da_thu' ? 'border-emerald-100' :
+                        overviewTab === 'da_chuyen_cat_dien' ? 'border-red-100' :
+                        'border-blue-100'
+                      }`}>
                         
                         {/* Dòng 1: Tên KH & Thợ phụ trách */}
                         <div className="flex justify-between items-center">
                           <span className="font-bold text-slate-800 text-[11px] truncate max-w-[170px]">{c.ten_kh}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${overviewTab === 'hen_lai' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${
+                            overviewTab === 'hen_lai' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
+                            overviewTab === 'da_thu' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
                             THỢ: {c.nguoi_phu_trach || 'CHƯA GIAO'}
                           </span>
                         </div>
@@ -364,7 +411,6 @@ export default function PhanCongDashboard() {
                             )}
                           </div>
                           
-                          {/* Số hiệu vị trí vị trí cây ghim trụ bên phải */}
                           <span className="font-mono text-slate-400 font-bold truncate max-w-[100px]" title={c.ma_tru_sach}>
                             <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach || 'Cụm lẻ'}
                           </span>
