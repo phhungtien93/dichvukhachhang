@@ -13,7 +13,7 @@ export default function PhanCongDashboard() {
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
   const fileInputRef = useRef(null);
 
-  // 1. TẢI DỮ LIỆU TỪ BẢNG MỚI (CHỈ LẤY CA CHƯA XONG HOẶC HẸN LẠI)
+  // 1. TẢI DỮ LIỆU TỪ BẢNG MỚI
   const fetchDanhSach = async () => {
     setLoading(true);
     try {
@@ -35,7 +35,7 @@ export default function PhanCongDashboard() {
     fetchDanhSach();
   }, []);
 
-  // 2. NẠP EXCEL VÀO BẢNG DANH_SACH_DOC_THU
+  // 2. NẠP EXCEL
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -51,24 +51,20 @@ export default function PhanCongDashboard() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        // Chuẩn hóa dữ liệu từ cột Excel sang cột trong Database
         const danhSachNhap = jsonData.map(row => {
           let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '';
           let phone = row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || '';
           let cleanName = rawName;
 
-          // THUẬT TOÁN 1: BÓC TÁCH SỐ ĐIỆN THOẠI TỪ TÊN
           const phoneMatch = rawName.match(/(?:\(|\[)?(?:DT|ĐT|SĐT)[:\s]*([0-9]{9,11})(?:\)|\])?/i);
           if (phoneMatch && phoneMatch[1]) {
             phone = phoneMatch[1];
             cleanName = rawName.replace(phoneMatch[0], '').trim();
           }
 
-          // THUẬT TOÁN 2: LÀM SẠCH SỐ TIỀN (Xóa dấu phẩy, chấm, chữ VNĐ)
           let rawTien = row['SỐ TIỀN'] || row['Số tiền'] || row['SO_TIEN'] || row['TỔNG TIỀN'] || 0;
           let cleanTien = 0;
           if (typeof rawTien === 'string') {
-            // Xóa tất cả các ký tự không phải là số
             cleanTien = parseInt(rawTien.replace(/[^0-9]/g, ''), 10);
           } else if (typeof rawTien === 'number') {
             cleanTien = rawTien;
@@ -82,7 +78,7 @@ export default function PhanCongDashboard() {
             so_dien_thoai: phone,
             so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
             ky_hoa_don: row['KỲ HÓA ĐƠN'] || row['Kỳ hóa đơn'] || row['KY_HOA_DON'] || 'Chưa rõ kỳ',
-            so_tien: cleanTien, // BƠM SỐ TIỀN ĐÃ LÀM SẠCH VÀO ĐÂY
+            so_tien: cleanTien, 
             trang_thai_hien_tai: 'chua_xu_ly', 
             nguoi_phu_trach: null
           };
@@ -94,7 +90,6 @@ export default function PhanCongDashboard() {
         }
 
         const toastId = toast.loading(`Đang nạp ${danhSachNhap.length} hồ sơ...`);
-        
         const { error } = await supabase.from('danh_sach_doc_thu').insert(danhSachNhap);
         if (error) throw error;
 
@@ -111,27 +106,60 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. THUẬT TOÁN GOM NHÓM
-  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach);
-  
-  const extractMaTru = (diaChi) => {
-    if (!diaChi) return 'Không rõ trụ';
-    const match = diaChi.match(/(?:trụ\s*|tại\s*trụ\s*|sau\s*trụ\s*)([a-zA-Z0-9/]+)/i);
-    return match && match[1] ? match[1].toUpperCase() : 'Không rõ trụ';
+  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH
+  const parseDiaChi = (diaChi) => {
+    if (!diaChi) return { maTru: 'Không rõ trụ', tuyen: 'Cụm Lẻ' };
+    
+    let str = diaChi.toUpperCase().replace(/CĐ/g, 'CD').replace(/ẤTRỤ/g, 'TRỤ');
+    let maTru = 'Không rõ trụ';
+    let tuyen = 'Cụm Lẻ';
+
+    const matchNguoc = str.match(/TRỤ\s+([A-Z0-9.\-]+)\s+TUYẾN\s+([A-Z0-9]+)/);
+    if (matchNguoc) {
+        tuyen = matchNguoc[2];
+        maTru = `${tuyen}/${matchNguoc[1]}`;
+        return { maTru, tuyen };
+    }
+
+    let match = str.match(/ĐCĐĐ\s+TRỤ\s+([A-Z0-9/.\-]+)/);
+    if (!match) {
+        const matches = [...str.matchAll(/TRỤ\s+([A-Z0-9/.\-]+)/g)];
+        if (matches.length > 0) match = matches[matches.length - 1]; 
+    }
+
+    if (match && match[1]) {
+        maTru = match[1].replace(/[.,;]+$/, ''); 
+        if (maTru.includes('/')) tuyen = maTru.split('/')[0];
+        else tuyen = maTru;
+    }
+
+    if (tuyen === '473D') tuyen = '473CD'; 
+    if (tuyen === '1') tuyen = 'Tuyến 1';
+    if (tuyen === '5') tuyen = 'Tuyến 5';
+    if (tuyen === '8') tuyen = 'Tuyến 8';
+
+    return { maTru, tuyen };
   };
 
+  // Bơm dữ liệu "sạch" vào danh sách gốc ngay lúc render
+  const danhSachEnriched = danhSach.map(c => {
+    const { maTru, tuyen } = parseDiaChi(c.dia_chi);
+    return { ...c, ma_tru_sach: maTru, tuyen_sach: tuyen };
+  });
+
+  const caChuaGiao = danhSachEnriched.filter(c => !c.nguoi_phu_trach);
+  const caDaGiao = danhSachEnriched.filter(c => c.nguoi_phu_trach);
+
+  // Tạo Kho Việc
   const khoViec = {};
   caChuaGiao.forEach(c => {
     const soGCS = c.so_gcs || 'Chưa rõ Sổ';
-    const maTru = extractMaTru(c.dia_chi);
-    const cumTruChinh = maTru !== 'Không rõ trụ' ? maTru.split('/')[0] : 'Cụm Lẻ';
-
     if (!khoViec[soGCS]) khoViec[soGCS] = {};
-    if (!khoViec[soGCS][cumTruChinh]) khoViec[soGCS][cumTruChinh] = [];
-    khoViec[soGCS][cumTruChinh].push(c);
+    if (!khoViec[soGCS][c.tuyen_sach]) khoViec[soGCS][c.tuyen_sach] = [];
+    khoViec[soGCS][c.tuyen_sach].push(c);
   });
 
-  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach);
+  // Tạo Giỏ Việc
   const gioViec = {};
   DANH_SACH_THO.forEach(tho => gioViec[tho] = []);
   caDaGiao.forEach(c => {
@@ -144,11 +172,7 @@ export default function PhanCongDashboard() {
     const ids = danhSachCa.map(c => c.id);
     const toastId = toast.loading(`Đang giao ${ids.length} ca cho ${tenTho}...`);
     try {
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenTho })
-        .in('id', ids);
-
+      const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho }).in('id', ids);
       if (error) throw error;
       setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho } : c));
       toast.success(`Đã đẩy vào giỏ ${tenTho}!`, { id: toastId });
@@ -158,20 +182,14 @@ export default function PhanCongDashboard() {
   };
 
   const toggleMicroTask = (id) => {
-    setSelectedMicroTasks(prev => 
-      prev.includes(id) ? prev.filter(taskId => taskId !== id) : [...prev, id]
-    );
+    setSelectedMicroTasks(prev => prev.includes(id) ? prev.filter(taskId => taskId !== id) : [...prev, id]);
   };
 
   const handleChuyenGiaoCaLe = async (tenThoNhan) => {
     if (selectedMicroTasks.length === 0) return;
     const toastId = toast.loading(`Đang chuyển ${selectedMicroTasks.length} ca sang ${tenThoNhan}...`);
     try {
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenThoNhan })
-        .in('id', selectedMicroTasks);
-
+      const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan }).in('id', selectedMicroTasks);
       if (error) throw error;
       setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan } : c));
       setSelectedMicroTasks([]);
@@ -224,7 +242,7 @@ export default function PhanCongDashboard() {
                     <div key={cumTru} className="border border-blue-100 bg-blue-50/30 rounded-lg p-2 relative group">
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <h4 className="font-bold text-blue-800 text-sm"><i className="fa-solid fa-bolt text-yellow-500 mr-1"></i> Tuyến {cumTru}</h4>
+                          <h4 className="font-bold text-blue-800 text-sm"><i className="fa-solid fa-bolt text-yellow-500 mr-1"></i> {cumTru.includes('Tuyến') || cumTru === 'Cụm Lẻ' ? cumTru : `Tuyến ${cumTru}`}</h4>
                           <p className="text-[10px] text-slate-500 font-medium">Bao gồm {danhSachCa.length} ca</p>
                         </div>
                       </div>
@@ -298,7 +316,8 @@ export default function PhanCongDashboard() {
               {gioViec[activeWorkerCart]?.length === 0 ? (
                 <p className="text-center text-slate-400 text-xs mt-10 italic">Giỏ hàng trống.</p>
               ) : (
-                [...gioViec[activeWorkerCart]].sort((a,b) => extractMaTru(a.dia_chi).localeCompare(extractMaTru(b.dia_chi))).map(c => (
+                /* CHỖ NÀY ĐÃ ĐƯỢC CẬP NHẬT ĐỂ SỬ DỤNG ma_tru_sach THAY VÌ GỌI HÀM CŨ */
+                [...gioViec[activeWorkerCart]].sort((a,b) => a.ma_tru_sach.localeCompare(b.ma_tru_sach)).map(c => (
                   <div 
                     key={c.id} 
                     onClick={() => toggleMicroTask(c.id)}
@@ -309,7 +328,9 @@ export default function PhanCongDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between mb-0.5">
-                        <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[100px]"><i className="fa-solid fa-location-dot mr-1"></i>{extractMaTru(c.dia_chi)}</span>
+                        <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[100px]" title={c.ma_tru_sach}>
+                          <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}
+                        </span>
                         <span className="font-mono font-bold text-[10px] text-blue-700">{c.ma_pe}</span>
                       </div>
                       <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
