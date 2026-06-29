@@ -29,7 +29,9 @@ export default function GiaoDienTho() {
       if (error) throw error;
       setDanhSachCa(data || []);
     } catch (error) {
-      toast.error('Lỗi tải dữ liệu ca!');
+      console.error("Chi tiết lỗi Supabase:", error);
+      // Hiển thị thẳng lỗi tiếng Anh của DB ra màn hình để bắt bệnh
+      toast.error(`Lỗi DB: ${error.message}`); 
     } finally {
       setLoading(false);
     }
