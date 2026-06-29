@@ -36,10 +36,11 @@ export default function PhanCongDashboard() {
       const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
       setDanhMucTienTo(tienToData || []);
 
+      // Tải danh sách đốc thu (Bổ sung thêm da_thu để đếm ở Tổng quan)
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu']);
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
@@ -176,8 +177,9 @@ export default function PhanCongDashboard() {
   };
 
   // 3. TẠO KHO VIỆC 2 TẦNG (SỔ GCS -> TRẠM/TUYẾN) ĐÚNG CHUẨN NGHIỆP VỤ
-  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach);
-  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach);
+  // Loại bỏ ca 'da_thu' để không hiển thị lại ở Kho Việc và Giỏ Việc
+  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu');
+  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu');
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
@@ -276,8 +278,9 @@ export default function PhanCongDashboard() {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-sm relative overflow-hidden">
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
-                    {/* Tạm thời để số 0, sau này viết hàm Load ca 'da_thu' sẽ nhét biến vào đây */}
-                    <div className="font-black text-2xl text-emerald-700 mb-1">0</div>
+                    <div className="font-black text-2xl text-emerald-700 mb-1">
+                      {danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length}
+                    </div>
                     <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
                     <p className="text-[9px] text-emerald-600 mt-0.5 font-medium">Chờ chốt sổ cuối ngày</p>
                   </div>
