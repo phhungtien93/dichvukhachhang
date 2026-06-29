@@ -197,9 +197,14 @@ export default function PhanCongDashboard() {
   // 2. Dành cho Khối TỔNG QUAN (Vá lỗi đếm trùng hàng tồn)
   const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
-  // Riêng Đã thu / Đã cắt: Đếm TOÀN BỘ. Vì bất cứ ca nào làm xong mà chưa bị khóa phiên thì chắc chắn là do HÔM NAY làm.
   const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
   const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
+
+  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
+  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat;
+  // Số ca đã giải quyết = Đã thu + Đã cắt + Đã báo cáo hẹn lại
+  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay; 
+  const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
   const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
     ? caHomNay.filter(c => c.trang_thai_hien_tai === overviewTab) 
@@ -310,18 +315,35 @@ export default function PhanCongDashboard() {
 
           {isOverviewExpanded && (
             <div className="p-3 border-t border-blue-100 bg-slate-50 space-y-3 shadow-inner">
-              <div className="grid grid-cols-2 gap-3">
+              
+              {/* === THANH TIẾN ĐỘ TỔNG (MASTER PROGRESS BAR) === */}
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-1">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider"><i className="fa-solid fa-bolt text-blue-500 mr-1.5"></i>Tiến độ thực thi hôm nay</span>
+                  <span className="text-[11px] font-bold text-slate-500"><span className="text-blue-600 font-black">{tongDaXuLy}</span> / {tongSoCa} ca ({ptTong}%)</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
+                  <div className="bg-blue-500 h-full rounded-full transition-all duration-700 ease-out relative" style={{ width: `${ptTong}%` }}>
+                     <div className="absolute top-0 right-0 bottom-0 left-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.2)_50%,rgba(255,255,255,0.2)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[progress_1s_linear_infinite]"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* === LƯỚI 4 Ô CHỈ SỐ GÓP (TÍCH HỢP TỶ LỆ) === */}
+              <div className="grid grid-cols-2 gap-2.5">
                 
                 {/* THẺ 1: KHÁCH HẸN LẠI (CAM) */}
                 <div 
                   onClick={() => setOverviewTab('hen_lai')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'hen_lai' ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' : 'bg-orange-50 border-orange-200 opacity-60'
+                    overviewTab === 'hen_lai' ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' : 'bg-orange-50 border-orange-200 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-orange-700 mb-1">{demHenLaiHomNay}</div>
+                    <div className="font-black text-2xl text-orange-700 mb-0.5 flex items-baseline gap-1">
+                      {demHenLaiHomNay} <span className="text-[10px] font-bold text-orange-400">/{tongSoCa}</span>
+                    </div>
                     <p className="text-[10px] font-black text-orange-800 uppercase tracking-wide">Khách hẹn lại</p>
                     <p className="text-[9px] text-orange-600 mt-0.5 font-bold">Cần nhắc đi thu</p>
                   </div>
@@ -331,12 +353,14 @@ export default function PhanCongDashboard() {
                 <div 
                   onClick={() => setOverviewTab('da_thu')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'da_thu' ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' : 'bg-emerald-50 border-emerald-200 opacity-60'
+                    overviewTab === 'da_thu' ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' : 'bg-emerald-50 border-emerald-200 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-emerald-700 mb-1">{demDaThu}</div>
+                    <div className="font-black text-2xl text-emerald-700 mb-0.5 flex items-baseline gap-1">
+                      {demDaThu} <span className="text-[10px] font-bold text-emerald-400">/{tongSoCa}</span>
+                    </div>
                     <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
                     <p className="text-[9px] text-emerald-600 mt-0.5 font-bold">Chờ VP đối soát</p>
                   </div>
@@ -346,12 +370,14 @@ export default function PhanCongDashboard() {
                 <div 
                   onClick={() => setOverviewTab('da_chuyen_cat_dien')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-100/70 border-red-400 ring-2 ring-red-400 shadow-md scale-[1.02]' : 'bg-red-50 border-red-200 opacity-60'
+                    overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-100/70 border-red-400 ring-2 ring-red-400 shadow-md scale-[1.02]' : 'bg-red-50 border-red-200 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-red-200/50 text-4xl"><i className="fa-solid fa-scissors"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-red-700 mb-1">{demDaCat}</div>
+                    <div className="font-black text-2xl text-red-700 mb-0.5 flex items-baseline gap-1">
+                      {demDaCat} <span className="text-[10px] font-bold text-red-400">/{tongSoCa}</span>
+                    </div>
                     <p className="text-[10px] font-black text-red-800 uppercase tracking-wide">Đã cắt điện</p>
                     <p className="text-[9px] text-red-600 mt-0.5 font-bold">Chuyển ngưng hơi</p>
                   </div>
@@ -361,12 +387,14 @@ export default function PhanCongDashboard() {
                 <div 
                   onClick={() => setOverviewTab('chua_xu_ly')}
                   className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'chua_xu_ly' ? 'bg-blue-100/70 border-blue-400 ring-2 ring-blue-400 shadow-md scale-[1.02]' : 'bg-blue-50 border-blue-200 opacity-60'
+                    overviewTab === 'chua_xu_ly' ? 'bg-blue-100/70 border-blue-400 ring-2 ring-blue-400 shadow-md scale-[1.02]' : 'bg-blue-50 border-blue-200 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <div className="absolute -right-2 -top-2 text-blue-200/50 text-4xl"><i className="fa-solid fa-file-circle-question"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-blue-700 mb-1">{demChuaXuHomNay}</div>
+                    <div className="font-black text-2xl text-blue-700 mb-0.5 flex items-baseline gap-1">
+                      {demChuaXuHomNay} <span className="text-[10px] font-bold text-blue-400">/{tongSoCa}</span>
+                    </div>
                     <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
                     <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thực thi</p>
                   </div>
