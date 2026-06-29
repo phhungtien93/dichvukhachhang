@@ -57,13 +57,12 @@ export default function GiaoDienTho() {
         ghi_chu: ghiChu
       }]);
 
-      // 3. CẦU NỐI ĐỒNG BỘ: Bắn hồ sơ sang luồng ĐIỀU HÀNH NGƯNG HƠI (Bảng customers)
-      if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien') {
+      // 3. CẦU NỐI ĐỒNG BỘ NÂNG CẤP: Bắn cả ca Cắt điện, Xác minh và Hẹn lại sang văn phòng
+      if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien' || trangThaiMoi === 'hen_lai') {
         
-        // Dịch mã trạng thái để Tab Điều Hành hiểu được
-        const trangThaiDich = trangThaiMoi === 'da_chuyen_xac_minh' ? 'cho_xac_minh' : 'cho_cat';
+        // Ca 'hen_lai' và ca 'da_chuyen_xac_minh' đều đồng bộ về tab 'cho_xac_minh' của văn phòng
+        const trangThaiDich = (trangThaiMoi === 'hen_lai' || trangThaiMoi === 'da_chuyen_xac_minh') ? 'cho_xac_minh' : 'cho_cat';
         
-        // Quét xem bên Điều Hành đã có hồ sơ KH này chưa (tránh tạo 2 dòng trùng mã PE)
         const { data: checkKh } = await supabase.from('customers').select('id').eq('ma_pe', ca.ma_pe).single();
 
         const payloadCustomer = {
@@ -74,27 +73,29 @@ export default function GiaoDienTho() {
           so_tien_no: ca.so_tien || 0,
           ly_do_ngung: 'no_cuoc',
           trang_thai: trangThaiDich,
-          ghi_chu: `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
+          // Nếu là ca hẹn thì tạo tiêu đề ghi chú màu cam đặc trưng cho văn phòng nhận diện
+          ghi_chu: trangThaiMoi === 'hen_lai' 
+            ? `🕒 [KHÁCH HẸN ĐÓNG] Ghi nhận từ hiện trường bởi thợ ${thoHienTai}: ${ghiChu}` 
+            : `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
         };
 
         let newCustomerId = null;
 
         if (checkKh) {
-          // Nếu có rồi thì Cập nhật trạng thái
           await supabase.from('customers').update(payloadCustomer).eq('id', checkKh.id);
           newCustomerId = checkKh.id;
         } else {
-          // Nếu chưa có thì Insert mới
           const { data: newKh } = await supabase.from('customers').insert([payloadCustomer]).select();
           if (newKh && newKh.length > 0) newCustomerId = newKh[0].id;
         }
 
-        // Bắn luôn Log Lịch sử sang bên Điều hành cho Đội trưởng nắm rõ
         if (newCustomerId) {
           await supabase.from('suspension_logs').insert([{
             customer_id: newCustomerId,
-            hanh_dong: 'Chuyển lệnh tự động',
-            noi_dung: `Đội Đốc Thu (${thoHienTai}) báo về: Khách ${kichBan}. Yêu cầu xử lý tiếp!`
+            hanh_dong: trangThaiMoi === 'hen_lai' ? 'Báo cáo khách hẹn' : 'Chuyển lệnh tự động',
+            noi_dung: trangThaiMoi === 'hen_lai' 
+              ? `Thợ ${thoHienTai} báo cáo: Khách hẹn đóng tiền điện cước kỳ này. Chi tiết hẹn: ${ghiChu}`
+              : `Đội Đốc Thu (${thoHienTai}) báo về: Khách ${kichBan}. Yêu cầu văn phòng theo dõi xử lý tiếp!`
           }]);
         }
       }
