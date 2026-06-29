@@ -106,49 +106,56 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH (BẢN V2 - CHỐNG DÍNH CHỮ)
+  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH (BẢN V3 - PHÂN BIỆT TRUNG THẾ & HẠ THẾ)
   const parseDiaChi = (diaChi) => {
     if (!diaChi) return { maTru: 'Không rõ trụ', tuyen: 'Cụm Lẻ' };
     
-    // 1. Chuyển chữ in hoa và sửa lỗi dính chữ gốc (ấTrụ -> Trụ)
+    // 1. Chuyển chữ in hoa và sửa lỗi dính chữ hành chính
     let str = diaChi.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
-
-    // TỰ ĐỘNG CHÈN KHOẢNG TRẮNG NẾU BỊ GÕ DÍNH LIỀN (VD: 478CDXÃ -> 478CD XÃ, 83.110.2ẤP -> 83.110.2 ẤP)
     str = str.replace(/([A-ZĐ0-9])(XÃ|ẤP|KHÓM|PHƯỜNG|TỔ|HUYỆN|TỈNH|THỊ|KCN)/g, '$1 $2');
 
-    let maTru = 'Không rõ trụ';
-    let tuyen = 'Cụm Lẻ';
+    // DANH SÁCH MỐC TUYẾN TRUNG THẾ CHUẨN CỦA ĐIỆN LỰC CHÂU PHÚ (GIỮ NGUYÊN CĐ VÀ CD)
+    const feederRegex = /(471CD|472CD|473CD|474CD|475CD|476CD|477CD|478CD|487CD|473D|472CĐ|474CĐ|475CĐ|476CĐ|478CĐ|MT1)/i;
+    const feederMatch = str.match(feederRegex);
 
-    // 2. Bắt trường hợp ngược: "TRỤ 284 TUYẾN 478CD XÃ..." -> Bây giờ quét chuẩn đét
-    const matchNguoc = str.match(/TRỤ\s+([A-ZĐ0-9.\-]+)\s+TUYẾN\s+([A-ZĐ0-9]+)/);
-    if (matchNguoc) {
-        tuyen = matchNguoc[2];
-        maTru = `${tuyen}/${matchNguoc[1]}`;
-        return { maTru, tuyen };
+    // KIỂM TRA NẾU CÓ TUYẾN TRUNG THẾ ĐI KÈM
+    if (feederMatch) {
+      const tuyen = feederMatch[1]; // Lấy đúng mã tuyến (Ví dụ: 478CD hoặc 475CĐ)
+      let maTru = 'Không rõ trụ';
+      
+      // Khớp tìm đoạn số trụ đi liền sau chữ TRỤ mà có chứa mã tuyến đó (Ví dụ: TRỤ 478CD/367)
+      const exactPoleMatch = str.match(new RegExp(`TRỤ\\s+(${tuyen}[A-ZĐ0-9/\\.-]+)`, 'i'));
+      
+      if (exactPoleMatch && exactPoleMatch[1]) {
+        maTru = exactPoleMatch[1].replace(/[.,;]+$/, '');
+      } else {
+        // Xử lý kịch bản gõ ngược: "TRỤ 284 TUYẾN 478CD"
+        const matchNguoc = str.match(new RegExp(`TRỤ\\s+([A-ZĐ0-9/\\.-]+)\\s+TUYẾN\\s+${tuyen}`, 'i'));
+        if (matchNguoc && matchNguoc[1]) {
+          maTru = `${tuyen}/${matchNguoc[1].replace(/[.,;]+$/, '')}`;
+        } else {
+          // Thử tìm bất kỳ số hiệu trụ nào cuối cùng trong câu rồi gắn mã tuyến vào đầu
+          const allPoles = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
+          if (allPoles.length > 0) {
+            let lastPole = allPoles[allPoles.length - 1][1].replace(/[.,;]+$/, '');
+            maTru = lastPole.includes(tuyen) ? lastPole : `${tuyen}/${lastPole}`;
+          } else {
+            maTru = tuyen;
+          }
+        }
+      }
+      return { maTru, tuyen };
+
+    } else {
+      // KHÔNG CÓ TUYẾN TRUNG THẾ -> ĐÂY LÀ TRỤ HẠ THẾ SINH HOẠT
+      // Ép toàn bộ vào "Cụm Lẻ" để sạch giao diện, không sinh Tuyến ảo (Tuyến 1, Tuyến 8)
+      let maTru = 'Không rõ trụ';
+      const matches = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
+      if (matches.length > 0) {
+        maTru = matches[matches.length - 1][1].replace(/[.,;]+$/, '');
+      }
+      return { maTru, tuyen: 'Cụm Lẻ' };
     }
-
-    // 3. Ưu tiên tìm địa chỉ có chữ "ĐCĐĐ TRỤ"
-    let match = str.match(/ĐCĐĐ\s+TRỤ\s+([A-ZĐ0-9/.\-]+)/);
-    if (!match) {
-        // 4. Nếu không có ĐCĐĐ, tìm tất cả chữ "TRỤ" và ưu tiên lấy cái cuối cùng
-        const matches = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
-        if (matches.length > 0) match = matches[matches.length - 1]; 
-    }
-
-    // 5. Phân tách Tuyến và Số Trụ
-    if (match && match[1]) {
-        maTru = match[1].replace(/[.,;]+$/, ''); 
-        if (maTru.includes('/')) tuyen = maTru.split('/')[0];
-        else tuyen = maTru;
-    }
-
-    // Khắc phục các biến thể gõ thiếu ký tự của hệ thống
-    if (tuyen === '473D') tuyen = '473CD'; 
-    if (tuyen === '1') tuyen = 'Tuyến 1';
-    if (tuyen === '5') tuyen = 'Tuyến 5';
-    if (tuyen === '8') tuyen = 'Tuyến 8';
-
-    return { maTru, tuyen };
   };
 
   // Bơm dữ liệu "sạch" vào danh sách gốc ngay lúc render
