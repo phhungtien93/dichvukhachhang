@@ -314,6 +314,10 @@ export default function PhanCongDashboard() {
                       </div>
                       <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
                       <p className="text-[10px] text-slate-500 mt-0.5"><i className="fa-regular fa-calendar mr-1"></i>Kỳ: {c.ky_hoa_don} - Đang: {c.trang_thai_hien_tai}</p>
+                      <p className="text-[11px] font-black text-red-500 mt-0.5">
+                        <i className="fa-solid fa-money-bill-wave mr-1"></i> 
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(c.so_tien || 0)}
+                      </p>
                     </div>
                   </div>
                 ))
