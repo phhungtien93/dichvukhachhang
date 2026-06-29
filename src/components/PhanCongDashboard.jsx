@@ -300,11 +300,45 @@ export default function PhanCongDashboard() {
                       {isExpanded && (
                         <div className={`mb-3 pt-2 border-t border-dashed space-y-1.5 ${isTram ? 'border-amber-200' : 'border-blue-200'}`}>
                           {danhSachCa.map(ca => (
-                            <div key={ca.id} className="bg-white p-1.5 rounded border border-slate-100 shadow-sm text-[10px] slide-up">
-                              <div className="font-bold text-slate-700 truncate">{ca.ten_kh}</div>
-                              <div className="flex justify-between mt-1 text-slate-500">
-                                <span className="font-medium text-slate-400"><i className="fa-solid fa-phone mr-1"></i>{ca.so_dien_thoai || 'Trống'}</span>
-                                <span className="font-mono text-blue-600 font-bold truncate max-w-[120px]" title={ca.ma_tru_sach}>
+                            <div key={ca.id} className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-[10px] slide-up">
+                              {/* Dòng 1: Tên Khách hàng */}
+                              <div className="font-bold text-slate-800 truncate mb-1.5 text-[11px]">{ca.ten_kh}</div>
+                              
+                              {/* Dòng 2: Mã PE | SĐT | Trụ */}
+                              <div className="flex justify-between items-center text-slate-500">
+                                <div className="flex gap-1.5 items-center">
+                                  
+                                  {/* MÃ PE - Click để Copy */}
+                                  <button 
+                                    onClick={() => { 
+                                      navigator.clipboard.writeText(ca.ma_pe); 
+                                      toast.success(`Đã copy: ${ca.ma_pe}`); 
+                                    }}
+                                    className="font-mono font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-blue-100 flex items-center"
+                                    title="Nhấn để copy mã PE"
+                                  >
+                                    <i className="fa-regular fa-copy mr-1 text-[9px]"></i>{ca.ma_pe}
+                                  </button>
+                                  
+                                  {/* SĐT - Click để Gọi */}
+                                  {ca.so_dien_thoai ? (
+                                    <a 
+                                      href={`tel:${ca.so_dien_thoai}`} 
+                                      className="font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-emerald-100 flex items-center"
+                                      title="Nhấn để gọi điện"
+                                    >
+                                      <i className="fa-solid fa-phone mr-1 text-[9px]"></i>{ca.so_dien_thoai}
+                                    </a>
+                                  ) : (
+                                    <span className="font-medium text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center">
+                                      <i className="fa-solid fa-phone-slash mr-1 text-[9px]"></i>Trống
+                                    </span>
+                                  )}
+
+                                </div>
+
+                                {/* BÊN PHẢI: Mã Trụ */}
+                                <span className="font-mono text-blue-600 font-bold truncate max-w-[90px] ml-1" title={ca.ma_tru_sach}>
                                   <i className="fa-solid fa-location-dot mr-1"></i>{ca.ma_tru_sach}
                                 </span>
                               </div>
