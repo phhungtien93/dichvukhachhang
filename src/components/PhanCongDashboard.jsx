@@ -93,7 +93,7 @@ export default function PhanCongDashboard() {
 
           const soGCS = row['SỔ GCS'] || '';
           const rawAddress = row['ĐỊA CHỈ'] || '';
-          const tuyenExcel = row['TUYẾN'] || row['MÃ LƯỚI'] || row['MÃ XUẤT TUYẾN'] || '';
+          const tuyenExcel = row['TUYẾN'] || row['MÃ LƯỚI'] || row['MÃ XUẤT TUYẾN'] || row['MÃ TUYẾN'] || '';
 
           let nhomPhanCong = 'Cụm Lẻ';
           let maTruSach = 'Không rõ trụ';
