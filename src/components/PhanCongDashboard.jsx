@@ -110,29 +110,35 @@ export default function PhanCongDashboard() {
   const parseDiaChi = (diaChi) => {
     if (!diaChi) return { maTru: 'Không rõ trụ', tuyen: 'Cụm Lẻ' };
     
-    let str = diaChi.toUpperCase().replace(/CĐ/g, 'CD').replace(/ẤTRỤ/g, 'TRỤ');
+    // 1. Chỉ sửa lỗi dính chữ (ấTrụ -> Trụ), TUYỆT ĐỐI GIỮ NGUYÊN CĐ
+    let str = diaChi.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
     let maTru = 'Không rõ trụ';
     let tuyen = 'Cụm Lẻ';
 
-    const matchNguoc = str.match(/TRỤ\s+([A-Z0-9.\-]+)\s+TUYẾN\s+([A-Z0-9]+)/);
+    // 2. Bắt trường hợp ngược: "TRỤ 296.1 TUYẾN 475CD" (Đã bổ sung chữ Đ vào luật quét)
+    const matchNguoc = str.match(/TRỤ\s+([A-ZĐ0-9.\-]+)\s+TUYẾN\s+([A-ZĐ0-9]+)/);
     if (matchNguoc) {
         tuyen = matchNguoc[2];
         maTru = `${tuyen}/${matchNguoc[1]}`;
         return { maTru, tuyen };
     }
 
-    let match = str.match(/ĐCĐĐ\s+TRỤ\s+([A-Z0-9/.\-]+)/);
+    // 3. Ưu tiên tìm địa chỉ có chữ "ĐCĐĐ TRỤ" (Bổ sung chữ Đ vào tập hợp [A-ZĐ0-9/.\-]+)
+    let match = str.match(/ĐCĐĐ\s+TRỤ\s+([A-ZĐ0-9/.\-]+)/);
     if (!match) {
-        const matches = [...str.matchAll(/TRỤ\s+([A-Z0-9/.\-]+)/g)];
+        // 4. Nếu không có ĐCĐĐ, tìm tất cả chữ "TRỤ" và ưu tiên lấy cái cuối cùng
+        const matches = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
         if (matches.length > 0) match = matches[matches.length - 1]; 
     }
 
+    // 5. Phân tách Tuyến và Số Trụ
     if (match && match[1]) {
         maTru = match[1].replace(/[.,;]+$/, ''); 
         if (maTru.includes('/')) tuyen = maTru.split('/')[0];
         else tuyen = maTru;
     }
 
+    // Fix các lỗi gõ sai đánh máy (nhưng không đụng tới CĐ)
     if (tuyen === '473D') tuyen = '473CD'; 
     if (tuyen === '1') tuyen = 'Tuyến 1';
     if (tuyen === '5') tuyen = 'Tuyến 5';
