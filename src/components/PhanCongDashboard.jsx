@@ -9,7 +9,6 @@ export default function PhanCongDashboard() {
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
   
-  // Lưu 2 bộ từ điển
   const [danhMucTram, setDanhMucTram] = useState([]);
   const [danhMucTienTo, setDanhMucTienTo] = useState([]); 
   
@@ -17,19 +16,16 @@ export default function PhanCongDashboard() {
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
   const fileInputRef = useRef(null);
 
-  // 1. TẢI TOÀN BỘ TỪ ĐIỂN VÀ DỮ LIỆU CÙNG LÚC
+  // 1. TẢI DỮ LIỆU TỪ SUPABASE
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Tải từ điển Trạm Hạ thế
       const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
       setDanhMucTram(tramData || []);
 
-      // Tải từ điển Dịch mã xuất tuyến (PB1204 -> CĐ)
       const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
       setDanhMucTienTo(tienToData || []);
 
-      // Tải danh sách đốc thu (Chỉ ca chưa xử lý hoặc hẹn lại)
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
@@ -47,7 +43,7 @@ export default function PhanCongDashboard() {
     fetchAllData();
   }, []);
 
-  // HÀM HỖ TRỢ: BÓC SỐ TRỤ VÀ HÓA GIẢI GÕ TẮT (VD: 5/ -> 475CĐ/)
+  // HÀM HỖ TRỢ: RỬA SỐ TRỤ
   const extractAndFixPole = (address, tuyenGoc) => {
     if (!address) return 'Không rõ trụ';
     let str = address.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
@@ -68,7 +64,7 @@ export default function PhanCongDashboard() {
     return pole;
   };
 
-  // 2. NHAI EXCEL VÀ DỊCH MÃ TUYẾN
+  // 2. NHAI EXCEL VÀ DỊCH MÃ TRUNG THẾ
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -102,42 +98,38 @@ export default function PhanCongDashboard() {
           let nhomPhanCong = 'Cụm Lẻ';
           let maTruSach = 'Không rõ trụ';
 
-          // A. LỌC QUA SỔ GCS (TRẠM HẠ THẾ)
           const tramKhop = danhMucTram.find(t => t.so_gcs == soGCS);
 
           if (tramKhop) {
+            // CA 1: Thuộc Trạm Công Cộng
             nhomPhanCong = tramKhop.ten_tram; 
             maTruSach = extractAndFixPole(rawAddress, tramKhop.tuyen_goc);
           } 
-          // B. LỌC QUA MÃ XUẤT TUYẾN (TRUNG THẾ ĐỘC LẬP)
           else if (tuyenExcel) {
+            // CA 2: Không thuộc Trạm công cộng nhưng CÓ cột Tuyến Excel
             let tuyenChuan = tuyenExcel.toUpperCase().trim();
-            
-            // Cỗ máy dịch thuật: Tìm cấu trúc PBxxxx + Số (VD: PB1204474)
             const matchDichMa = tuyenChuan.match(/^(PB\d{4})(\d+)$/i);
             
             if (matchDichMa) {
-              const tienTo = matchDichMa[1]; // Lấy PB1204
-              const soTuyen = matchDichMa[2]; // Lấy 474
-              
-              // Tra từ điển xem PB1204 là CD hay CĐ
+              const tienTo = matchDichMa[1];
+              const soTuyen = matchDichMa[2];
               const tuDien = danhMucTienTo.find(d => d.ma_tien_to === tienTo);
-              
-              if (tuDien) {
-                // Ráp 474 + CĐ => 474CĐ
-                tuyenChuan = `${soTuyen}${tuDien.hau_to}`;
-              }
+              if (tuDien) tuyenChuan = `${soTuyen}${tuDien.hau_to}`;
             } else {
-              // Nếu xuất file không có PB mà ghi thẳng Tuyến 474CD thì dọn dẹp bớt chữ "Tuyến"
               tuyenChuan = tuyenChuan.replace(/TUYẾN\s*/g, '');
             }
-
-            nhomPhanCong = `Tuyến ${tuyenChuan}`; // Hiện trên UI: Tuyến 474CĐ
-            maTruSach = extractAndFixPole(rawAddress, tuyenChuan); // Truyền 474CĐ vào để hóa giải số gõ tắt (nếu có)
+            nhomPhanCong = `Tuyến ${tuyenChuan}`; 
+            maTruSach = extractAndFixPole(rawAddress, tuyenChuan); 
           } 
-          // C. LỌT SÀNG (ĐẨY VÀO CỤM LẺ)
           else {
-            maTruSach = extractAndFixPole(rawAddress, null);
+            // CA 3: BỘ CỨU HỘ (Không có Sổ, Không có cột Excel -> Tự mò Tuyến trong địa chỉ)
+            const fallbackMatch = rawAddress.toUpperCase().match(/(471CD|472CD|473CD|474CD|475CD|476CD|477CD|478CD|487CD|473D|472CĐ|474CĐ|475CĐ|476CĐ|478CĐ|MT1)/i);
+            if (fallbackMatch) {
+              nhomPhanCong = `Tuyến ${fallbackMatch[1]}`;
+              maTruSach = extractAndFixPole(rawAddress, fallbackMatch[1]);
+            } else {
+              maTruSach = extractAndFixPole(rawAddress, null);
+            }
           }
 
           return {
@@ -173,15 +165,19 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. TẠO KHO VIỆC
+  // 3. TẠO KHO VIỆC 2 TẦNG (SỔ GCS -> TRẠM/TUYẾN) ĐÚNG CHUẨN NGHIỆP VỤ
   const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach);
   const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach);
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
-    const nhom = c.nhom_phan_cong;
-    if (!khoViec[nhom]) khoViec[nhom] = [];
-    khoViec[nhom].push(c);
+    const soGCS = c.so_gcs || 'Chưa rõ Sổ';
+    const nhom = c.nhom_phan_cong; // Đây là tên Trạm hoặc tên Tuyến
+    
+    if (!khoViec[soGCS]) khoViec[soGCS] = {};
+    if (!khoViec[soGCS][nhom]) khoViec[soGCS][nhom] = [];
+    
+    khoViec[soGCS][nhom].push(c);
   });
 
   const gioViec = {};
@@ -239,10 +235,10 @@ export default function PhanCongDashboard() {
         </div>
       </div>
 
-      {/* KHO VIỆC LÀM SẠCH */}
+      {/* KHO VIỆC 2 TẦNG (GOM THEO SỔ GCS CHUẨN) */}
       <div className="flex-1 p-3 space-y-3 overflow-y-auto">
         <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-2">
-          <i className="fa-solid fa-layer-group"></i> Kho Việc (Trạm & Tuyến)
+          <i className="fa-solid fa-layer-group"></i> Kho Việc 
         </h3>
         
         {Object.keys(khoViec).length === 0 ? (
@@ -251,36 +247,49 @@ export default function PhanCongDashboard() {
              <p className="text-xs font-bold uppercase">Kho việc đã sạch bách!</p>
           </div>
         ) : (
-          Object.keys(khoViec).sort().map(nhom => {
-            const danhSachCa = khoViec[nhom];
-            const isTram = nhom.toLowerCase().includes('trạm');
-            return (
-              <div key={nhom} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
-                <div className={`px-3 py-2 border-b flex justify-between items-center ${isTram ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'}`}>
-                  <span className={`text-xs font-black uppercase ${isTram ? 'text-amber-800' : 'text-blue-800'}`}>
-                    <i className={`fa-solid ${isTram ? 'fa-transformer text-amber-500' : 'fa-bolt text-blue-500'} mr-2`}></i>
-                    {nhom}
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded shadow-sm">{danhSachCa.length} ca</span>
-                </div>
-                
-                <div className="p-2">
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Giao nguyên cụm cho:</span>
-                    {DANH_SACH_THO.map(tho => (
-                      <button 
-                        key={tho} 
-                        onClick={() => handleGiaoCumTru(danhSachCa, tho)}
-                        className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 px-2 py-1.5 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 flex-1 justify-center"
-                      >
-                        {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+          Object.keys(khoViec).sort().map(soGCS => (
+            <div key={soGCS} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
+              {/* LỚP 1: SỔ GCS */}
+              <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                <span className="text-[11px] font-black text-slate-800 uppercase">SỔ {soGCS}</span>
               </div>
-            )
-          })
+              
+              {/* LỚP 2: CÁC TRẠM HOẶC TUYẾN BÊN TRONG SỔ */}
+              <div className="p-2 space-y-2">
+                {Object.keys(khoViec[soGCS]).sort().map(nhom => {
+                  const danhSachCa = khoViec[soGCS][nhom];
+                  const isTram = nhom.toLowerCase().includes('trạm');
+                  
+                  return (
+                    <div key={nhom} className={`border rounded-lg p-2 relative group ${isTram ? 'bg-amber-50/40 border-amber-100' : 'bg-blue-50/40 border-blue-100'}`}>
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <h4 className={`font-bold text-sm ${isTram ? 'text-amber-800' : 'text-blue-800'}`}>
+                            <i className={`fa-solid ${isTram ? 'fa-transformer text-amber-500' : 'fa-bolt text-yellow-500'} mr-1`}></i> 
+                            {nhom}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-medium">Bao gồm {danhSachCa.length} ca</p>
+                        </div>
+                      </div>
+                      
+                      <div className={`flex flex-wrap gap-1.5 border-t pt-2 mt-1 ${isTram ? 'border-amber-100' : 'border-blue-100'}`}>
+                        <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Đẩy nhanh vào giỏ:</span>
+                        {DANH_SACH_THO.map(tho => (
+                          <button 
+                            key={tho} 
+                            onClick={() => handleGiaoCumTru(danhSachCa, tho)}
+                            className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1"
+                          >
+                            {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))
         )}
       </div>
 
@@ -349,7 +358,7 @@ export default function PhanCongDashboard() {
                         <span className="font-mono font-bold text-[10px] text-blue-700 bg-blue-50 px-1 rounded">{c.ma_pe}</span>
                       </div>
                       <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Nhóm: {c.nhom_phan_cong}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Sổ: {c.so_gcs} | {c.nhom_phan_cong}</p>
                       <p className="text-[11px] font-black text-red-500 mt-0.5">
                         <i className="fa-solid fa-money-bill-wave mr-1"></i> 
                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(c.so_tien || 0)}
