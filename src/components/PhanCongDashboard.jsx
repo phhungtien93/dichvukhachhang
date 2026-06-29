@@ -255,15 +255,13 @@ export default function PhanCongDashboard() {
              <p className="text-xs font-bold uppercase">Kho việc đã sạch bách!</p>
           </div>
         ) : (
-          // Thay đổi 2: Thay dòng Object.keys(khoViec).sort().map(soGCS => (
-        // Bằng đoạn thuật toán sắp xếp thông minh này:
-        {Object.keys(khoViec).sort((a, b) => {
-          const aHasTram = Object.keys(khoViec[a]).some(nhom => nhom.toLowerCase().includes('trạm'));
-          const bHasTram = Object.keys(khoViec[b]).some(nhom => nhom.toLowerCase().includes('trạm'));
-          if (aHasTram && !bHasTram) return -1;
-          if (!aHasTram && bHasTram) return 1;
-          return a.localeCompare(b);
-        }).map(soGCS => (
+          Object.keys(khoViec).sort((a, b) => {
+            const aHasTram = Object.keys(khoViec[a]).some(nhom => nhom.toLowerCase().includes('trạm'));
+            const bHasTram = Object.keys(khoViec[b]).some(nhom => nhom.toLowerCase().includes('trạm'));
+            if (aHasTram && !bHasTram) return -1;
+            if (!aHasTram && bHasTram) return 1;
+            return a.localeCompare(b);
+          }).map(soGCS => (
             <div key={soGCS} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
               {/* LỚP 1: SỔ GCS */}
               <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
@@ -272,12 +270,10 @@ export default function PhanCongDashboard() {
               
               {/* LỚP 2: CÁC TRẠM HOẶC TUYẾN BÊN TRONG SỔ */}
               <div className="p-2 space-y-2">
-                // Thay đổi 3: Thay thế toàn bộ khối return của nhóm (từ dòng 257 đến 281) bằng khối mới
                 {Object.keys(khoViec[soGCS]).sort().map(nhom => {
                   const danhSachCa = khoViec[soGCS][nhom];
                   const isTram = nhom.toLowerCase().includes('trạm');
                   
-                  // BẮT ĐẦU KHỐI UI MỚI CÓ NÚT XỔ XUỐNG
                   const groupId = `${soGCS}-${nhom}`;
                   const isExpanded = expandedGroups[groupId];
 
