@@ -9,17 +9,25 @@ export default function GiaoDienTho() {
   const [dsCa, setDsCa] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchData = async () => {
+ const fetchData = async () => {
+    if (!thoHienTai) return;
     setLoading(true);
     try {
+      // 1. Chốt mốc 00:00 của ngày hôm nay
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
+
+      // 2. Ép App Thợ chỉ tải việc của Hôm nay (hoặc ca cũ đã được Đội trưởng gia hạn)
       const { data, error } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
         .eq('nguoi_phu_trach', thoHienTai)
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']); // Chỉ lấy ca còn tồn
+        .eq('is_active', true) // Bắt buộc phải là ca còn mở phiên
+        .gte('ngay_nap_du_lieu', todayMidnight.toISOString()) // CỐT LÕI: Chỉ tải ca có mốc thời gian >= 00:00 hôm nay
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
       
       if (error) throw error;
-      setDsCa(data || []);
+      setDanhSachCa(data || []);
     } catch (error) {
       toast.error('Lỗi tải dữ liệu ca!');
     } finally {
