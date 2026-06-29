@@ -106,16 +106,20 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH
+  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH (BẢN V2 - CHỐNG DÍNH CHỮ)
   const parseDiaChi = (diaChi) => {
     if (!diaChi) return { maTru: 'Không rõ trụ', tuyen: 'Cụm Lẻ' };
     
-    // 1. Chỉ sửa lỗi dính chữ (ấTrụ -> Trụ), TUYỆT ĐỐI GIỮ NGUYÊN CĐ
+    // 1. Chuyển chữ in hoa và sửa lỗi dính chữ gốc (ấTrụ -> Trụ)
     let str = diaChi.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
+
+    // TỰ ĐỘNG CHÈN KHOẢNG TRẮNG NẾU BỊ GÕ DÍNH LIỀN (VD: 478CDXÃ -> 478CD XÃ, 83.110.2ẤP -> 83.110.2 ẤP)
+    str = str.replace(/([A-ZĐ0-9])(XÃ|ẤP|KHÓM|PHƯỜNG|TỔ|HUYỆN|TỈNH|THỊ|KCN)/g, '$1 $2');
+
     let maTru = 'Không rõ trụ';
     let tuyen = 'Cụm Lẻ';
 
-    // 2. Bắt trường hợp ngược: "TRỤ 296.1 TUYẾN 475CD" (Đã bổ sung chữ Đ vào luật quét)
+    // 2. Bắt trường hợp ngược: "TRỤ 284 TUYẾN 478CD XÃ..." -> Bây giờ quét chuẩn đét
     const matchNguoc = str.match(/TRỤ\s+([A-ZĐ0-9.\-]+)\s+TUYẾN\s+([A-ZĐ0-9]+)/);
     if (matchNguoc) {
         tuyen = matchNguoc[2];
@@ -123,7 +127,7 @@ export default function PhanCongDashboard() {
         return { maTru, tuyen };
     }
 
-    // 3. Ưu tiên tìm địa chỉ có chữ "ĐCĐĐ TRỤ" (Bổ sung chữ Đ vào tập hợp [A-ZĐ0-9/.\-]+)
+    // 3. Ưu tiên tìm địa chỉ có chữ "ĐCĐĐ TRỤ"
     let match = str.match(/ĐCĐĐ\s+TRỤ\s+([A-ZĐ0-9/.\-]+)/);
     if (!match) {
         // 4. Nếu không có ĐCĐĐ, tìm tất cả chữ "TRỤ" và ưu tiên lấy cái cuối cùng
@@ -138,7 +142,7 @@ export default function PhanCongDashboard() {
         else tuyen = maTru;
     }
 
-    // Fix các lỗi gõ sai đánh máy (nhưng không đụng tới CĐ)
+    // Khắc phục các biến thể gõ thiếu ký tự của hệ thống
     if (tuyen === '473D') tuyen = '473CD'; 
     if (tuyen === '1') tuyen = 'Tuyến 1';
     if (tuyen === '5') tuyen = 'Tuyến 5';
