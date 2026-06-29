@@ -8,34 +8,65 @@ const DANH_SACH_THO = ['Anh A', 'Anh B', 'Anh C', 'Anh D'];
 export default function PhanCongDashboard() {
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
+  const [danhMucTram, setDanhMucTram] = useState([]);
   
   const [activeWorkerCart, setActiveWorkerCart] = useState(null);
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
   const fileInputRef = useRef(null);
 
-  // 1. TẢI DỮ LIỆU TỪ BẢNG MỚI
-  const fetchDanhSach = async () => {
+  // 1. TẢI DỮ LIỆU ĐỒNG THỜI TỪ 2 BẢNG
+  const fetchAllData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Tải từ điển trạm
+      const { data: tramData, error: tramErr } = await supabase.from('danh_muc_tram').select('*');
+      if (tramErr) throw tramErr;
+      setDanhMucTram(tramData || []);
+
+      // Tải danh sách đốc thu (Chỉ ca chưa xử lý hoặc hẹn lại)
+      const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']); 
-
-      if (error) throw error;
-      setDanhSach(data || []);
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
+      if (dsErr) throw dsErr;
+      
+      setDanhSach(dsData || []);
     } catch (error) {
-      toast.error('Lỗi tải dữ liệu phân công!');
+      toast.error('Lỗi kết nối cơ sở dữ liệu!');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDanhSach();
+    fetchAllData();
   }, []);
 
-  // 2. NẠP EXCEL
+  // HÀM HỖ TRỢ: BÓC SỐ TRỤ VÀ HÓA GIẢI GÕ TẮT (VD: 5/ -> 475CĐ/)
+  const extractAndFixPole = (address, tuyenGoc) => {
+    if (!address) return 'Không rõ trụ';
+    let str = address.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
+    str = str.replace(/([A-ZĐ0-9])(XÃ|ẤP|KHÓM|PHƯỜNG|TỔ|HUYỆN|TỈNH|THỊ|KCN)/g, '$1 $2');
+
+    // Lấy chuỗi nằm sau chữ TRỤ cuối cùng
+    const allPoles = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
+    let pole = allPoles.length > 0 ? allPoles[allPoles.length - 1][1].replace(/[.,;]+$/, '') : 'Không rõ trụ';
+
+    // Nếu có tuyến gốc, thử dịch mã gõ tắt (1/, 5/, 8/)
+    if (tuyenGoc && pole !== 'Không rõ trụ') {
+      const matchShorthand = pole.match(/^(\d+)\//); // Tìm số đứng trước dấu /
+      if (matchShorthand) {
+        const shortNum = matchShorthand[1];
+        // Nếu số gõ tắt (VD: 5) trùng với số của tuyến mẹ (VD: 475) thì thay thế
+        if (tuyenGoc.includes(shortNum)) {
+          pole = pole.replace(`${shortNum}/`, `${tuyenGoc}/`);
+        }
+      }
+    }
+    return pole;
+  };
+
+  // 2. NHAI EXCEL VÀ LÀM GIÀU DỮ LIỆU TẠI NGUỒN
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -48,56 +79,72 @@ export default function PhanCongDashboard() {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
         const danhSachNhap = jsonData.map(row => {
-          let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '';
-          let phone = row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || '';
-          let cleanName = rawName;
-
+          // A. Làm sạch cơ bản (Tên, Số điện thoại, Tiền)
+          let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || '';
+          let phone = '';
           const phoneMatch = rawName.match(/(?:\(|\[)?(?:DT|ĐT|SĐT)[:\s]*([0-9]{9,11})(?:\)|\])?/i);
-          if (phoneMatch && phoneMatch[1]) {
+          if (phoneMatch) {
             phone = phoneMatch[1];
-            cleanName = rawName.replace(phoneMatch[0], '').trim();
+            rawName = rawName.replace(phoneMatch[0], '').trim();
           }
 
-          let rawTien = row['SỐ TIỀN'] || row['Số tiền'] || row['SO_TIEN'] || row['TỔNG TIỀN'] || 0;
-          let cleanTien = 0;
-          if (typeof rawTien === 'string') {
-            cleanTien = parseInt(rawTien.replace(/[^0-9]/g, ''), 10);
-          } else if (typeof rawTien === 'number') {
-            cleanTien = rawTien;
+          let rawTien = row['SỐ TIỀN'] || row['TỔNG TIỀN'] || 0;
+          let cleanTien = typeof rawTien === 'string' ? parseInt(rawTien.replace(/[^0-9]/g, ''), 10) : rawTien;
+
+          // B. Lấy các thông số điều hướng
+          const soGCS = row['SỔ GCS'] || '';
+          const rawAddress = row['ĐỊA CHỈ'] || '';
+          const tuyenExcel = row['TUYẾN'] || row['MÃ LƯỚI'] || '';
+
+          // C. BỘ NÃO NHÓM DỮ LIỆU CHÍNH (Kết hợp Trạm và VLOOKUP)
+          let nhomPhanCong = 'Cụm Lẻ';
+          let maTruSach = 'Không rõ trụ';
+
+          // Đối chiếu Sổ GCS với Bảng Danh mục Trạm
+          const tramKhop = danhMucTram.find(t => t.so_gcs == soGCS);
+
+          if (tramKhop) {
+            // CA 1: KHÁCH HÀNG THUỘC TRẠM CÔNG CỘNG (Ánh sáng sinh hoạt)
+            nhomPhanCong = tramKhop.ten_tram; 
+            maTruSach = extractAndFixPole(rawAddress, tramKhop.tuyen_goc);
+          } else if (tuyenExcel) {
+            // CA 2: KHÁCH HÀNG TRUNG THẾ ĐỘC LẬP (Sử dụng dữ liệu VLOOKUP từ CMIS)
+            const tuyenChuan = tuyenExcel.toUpperCase().replace(/TUYẾN\s*/g, '');
+            nhomPhanCong = `Tuyến ${tuyenChuan}`;
+            maTruSach = extractAndFixPole(rawAddress, tuyenChuan);
+          } else {
+            // CA 3: LỌT SÀNG (Đẩy vào Cụm lẻ)
+            maTruSach = extractAndFixPole(rawAddress, null);
           }
-          if (isNaN(cleanTien)) cleanTien = 0;
 
           return {
-            ma_pe: row['MÃ PE'] || row['MA_PE'] || row['Mã khách hàng'] || '',
-            ten_kh: cleanName,
-            dia_chi: row['ĐỊA CHỈ'] || row['DIA_CHI'] || row['Địa chỉ'] || '',
+            ma_pe: row['MÃ PE'] || row['MA_PE'] || '',
+            ten_kh: rawName,
+            dia_chi: rawAddress,
             so_dien_thoai: phone,
-            so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
-            ky_hoa_don: row['KỲ HÓA ĐƠN'] || row['Kỳ hóa đơn'] || row['KY_HOA_DON'] || 'Chưa rõ kỳ',
-            so_tien: cleanTien, 
+            so_gcs: soGCS,
+            ky_hoa_don: row['KỲ HÓA ĐƠN'] || 'Chưa rõ',
+            so_tien: isNaN(cleanTien) ? 0 : cleanTien,
+            nhom_phan_cong: nhomPhanCong,  // LƯU KẾT QUẢ ĐÃ GOM NHÓM
+            ma_tru_sach: maTruSach,        // LƯU KẾT QUẢ TRỤ ĐÃ RỬA
             trang_thai_hien_tai: 'chua_xu_ly', 
             nguoi_phu_trach: null
           };
         }).filter(item => item.ma_pe);
 
-        if (danhSachNhap.length === 0) {
-          toast.error('File Excel trống hoặc sai tên cột!');
-          return;
-        }
+        if (danhSachNhap.length === 0) return toast.error('File Excel trống!');
 
         const toastId = toast.loading(`Đang nạp ${danhSachNhap.length} hồ sơ...`);
         const { error } = await supabase.from('danh_sach_doc_thu').insert(danhSachNhap);
         if (error) throw error;
 
         toast.success(`Nạp thành công ${danhSachNhap.length} hồ sơ!`, { id: toastId });
-        fetchDanhSach(); 
+        fetchAllData(); 
       } catch (error) {
-        console.error(error);
-        toast.error('Có lỗi xảy ra khi đọc file Excel!');
+        toast.error('Có lỗi xảy ra khi nạp file!');
       } finally {
         setLoading(false);
         e.target.value = ''; 
@@ -106,77 +153,17 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. THUẬT TOÁN RỬA DỮ LIỆU & GOM NHÓM THÔNG MINH (BẢN V3 - PHÂN BIỆT TRUNG THẾ & HẠ THẾ)
-  const parseDiaChi = (diaChi) => {
-    if (!diaChi) return { maTru: 'Không rõ trụ', tuyen: 'Cụm Lẻ' };
-    
-    // 1. Chuyển chữ in hoa và sửa lỗi dính chữ hành chính
-    let str = diaChi.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
-    str = str.replace(/([A-ZĐ0-9])(XÃ|ẤP|KHÓM|PHƯỜNG|TỔ|HUYỆN|TỈNH|THỊ|KCN)/g, '$1 $2');
+  // 3. TẠO KHO VIỆC (Bây giờ code nhẹ tênh vì data đã được rửa sạch)
+  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach);
+  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach);
 
-    // DANH SÁCH MỐC TUYẾN TRUNG THẾ CHUẨN CỦA ĐIỆN LỰC CHÂU PHÚ (GIỮ NGUYÊN CĐ VÀ CD)
-    const feederRegex = /(471CD|472CD|473CD|474CD|475CD|476CD|477CD|478CD|487CD|473D|472CĐ|474CĐ|475CĐ|476CĐ|478CĐ|MT1)/i;
-    const feederMatch = str.match(feederRegex);
-
-    // KIỂM TRA NẾU CÓ TUYẾN TRUNG THẾ ĐI KÈM
-    if (feederMatch) {
-      const tuyen = feederMatch[1]; // Lấy đúng mã tuyến (Ví dụ: 478CD hoặc 475CĐ)
-      let maTru = 'Không rõ trụ';
-      
-      // Khớp tìm đoạn số trụ đi liền sau chữ TRỤ mà có chứa mã tuyến đó (Ví dụ: TRỤ 478CD/367)
-      const exactPoleMatch = str.match(new RegExp(`TRỤ\\s+(${tuyen}[A-ZĐ0-9/\\.-]+)`, 'i'));
-      
-      if (exactPoleMatch && exactPoleMatch[1]) {
-        maTru = exactPoleMatch[1].replace(/[.,;]+$/, '');
-      } else {
-        // Xử lý kịch bản gõ ngược: "TRỤ 284 TUYẾN 478CD"
-        const matchNguoc = str.match(new RegExp(`TRỤ\\s+([A-ZĐ0-9/\\.-]+)\\s+TUYẾN\\s+${tuyen}`, 'i'));
-        if (matchNguoc && matchNguoc[1]) {
-          maTru = `${tuyen}/${matchNguoc[1].replace(/[.,;]+$/, '')}`;
-        } else {
-          // Thử tìm bất kỳ số hiệu trụ nào cuối cùng trong câu rồi gắn mã tuyến vào đầu
-          const allPoles = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
-          if (allPoles.length > 0) {
-            let lastPole = allPoles[allPoles.length - 1][1].replace(/[.,;]+$/, '');
-            maTru = lastPole.includes(tuyen) ? lastPole : `${tuyen}/${lastPole}`;
-          } else {
-            maTru = tuyen;
-          }
-        }
-      }
-      return { maTru, tuyen };
-
-    } else {
-      // KHÔNG CÓ TUYẾN TRUNG THẾ -> ĐÂY LÀ TRỤ HẠ THẾ SINH HOẠT
-      // Ép toàn bộ vào "Cụm Lẻ" để sạch giao diện, không sinh Tuyến ảo (Tuyến 1, Tuyến 8)
-      let maTru = 'Không rõ trụ';
-      const matches = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
-      if (matches.length > 0) {
-        maTru = matches[matches.length - 1][1].replace(/[.,;]+$/, '');
-      }
-      return { maTru, tuyen: 'Cụm Lẻ' };
-    }
-  };
-
-  // Bơm dữ liệu "sạch" vào danh sách gốc ngay lúc render
-  const danhSachEnriched = danhSach.map(c => {
-    const { maTru, tuyen } = parseDiaChi(c.dia_chi);
-    return { ...c, ma_tru_sach: maTru, tuyen_sach: tuyen };
-  });
-
-  const caChuaGiao = danhSachEnriched.filter(c => !c.nguoi_phu_trach);
-  const caDaGiao = danhSachEnriched.filter(c => c.nguoi_phu_trach);
-
-  // Tạo Kho Việc
   const khoViec = {};
   caChuaGiao.forEach(c => {
-    const soGCS = c.so_gcs || 'Chưa rõ Sổ';
-    if (!khoViec[soGCS]) khoViec[soGCS] = {};
-    if (!khoViec[soGCS][c.tuyen_sach]) khoViec[soGCS][c.tuyen_sach] = [];
-    khoViec[soGCS][c.tuyen_sach].push(c);
+    const nhom = c.nhom_phan_cong;
+    if (!khoViec[nhom]) khoViec[nhom] = [];
+    khoViec[nhom].push(c);
   });
 
-  // Tạo Giỏ Việc
   const gioViec = {};
   DANH_SACH_THO.forEach(tho => gioViec[tho] = []);
   caDaGiao.forEach(c => {
@@ -184,33 +171,31 @@ export default function PhanCongDashboard() {
     gioViec[c.nguoi_phu_trach].push(c);
   });
 
-  // 4. HÀM CHIA CA
+  // 4. CHỨC NĂNG CHIA CA
   const handleGiaoCumTru = async (danhSachCa, tenTho) => {
     const ids = danhSachCa.map(c => c.id);
-    const toastId = toast.loading(`Đang giao ${ids.length} ca cho ${tenTho}...`);
+    const toastId = toast.loading(`Giao ${ids.length} ca cho ${tenTho}...`);
     try {
       const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho }).in('id', ids);
       if (error) throw error;
       setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho } : c));
-      toast.success(`Đã đẩy vào giỏ ${tenTho}!`, { id: toastId });
+      toast.success(`Xong!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi khi phân công', { id: toastId });
     }
   };
 
-  const toggleMicroTask = (id) => {
-    setSelectedMicroTasks(prev => prev.includes(id) ? prev.filter(taskId => taskId !== id) : [...prev, id]);
-  };
+  const toggleMicroTask = (id) => setSelectedMicroTasks(prev => prev.includes(id) ? prev.filter(tId => tId !== id) : [...prev, id]);
 
   const handleChuyenGiaoCaLe = async (tenThoNhan) => {
     if (selectedMicroTasks.length === 0) return;
-    const toastId = toast.loading(`Đang chuyển ${selectedMicroTasks.length} ca sang ${tenThoNhan}...`);
+    const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
     try {
       const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan }).in('id', selectedMicroTasks);
       if (error) throw error;
       setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan } : c));
       setSelectedMicroTasks([]);
-      toast.success(`Đã chuyển cho ${tenThoNhan}!`, { id: toastId });
+      toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi điều chuyển', { id: toastId });
     }
@@ -225,63 +210,58 @@ export default function PhanCongDashboard() {
         </div>
         <div className="flex gap-2">
           <input type="file" accept=".xlsx, .xls" ref={fileInputRef} onChange={handleImportExcel} className="hidden" />
-          <button onClick={() => fileInputRef.current.click()} disabled={loading} className="bg-emerald-100 p-2 rounded-full text-emerald-600 hover:bg-emerald-200 hover:text-emerald-700 shadow-sm border border-emerald-200">
+          <button onClick={() => fileInputRef.current.click()} disabled={loading} className="bg-emerald-100 p-2 rounded-full text-emerald-600 shadow-sm border border-emerald-200">
             <i className="fa-solid fa-file-excel"></i>
           </button>
-          <button onClick={fetchDanhSach} disabled={loading} className="bg-slate-100 p-2 rounded-full text-slate-600 hover:bg-blue-100 hover:text-blue-600 shadow-sm border border-slate-200">
+          <button onClick={fetchAllData} disabled={loading} className="bg-slate-100 p-2 rounded-full text-slate-600 shadow-sm border border-slate-200">
             <i className={`fa-solid fa-rotate ${loading ? 'animate-spin' : ''}`}></i>
           </button>
         </div>
       </div>
 
-      {/* KHO VIỆC */}
+      {/* KHO VIỆC LÀM SẠCH */}
       <div className="flex-1 p-3 space-y-3 overflow-y-auto">
         <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-2">
-          <i className="fa-solid fa-boxes-stacked"></i> Kho việc (Gom theo Trụ)
+          <i className="fa-solid fa-layer-group"></i> Kho Việc (Trạm & Tuyến)
         </h3>
         
         {Object.keys(khoViec).length === 0 ? (
           <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-400">
-             <i className="fa-solid fa-check-double text-3xl mb-2 text-emerald-400"></i>
-             <p className="text-xs font-bold uppercase">Đã phân công hết!</p>
+             <i className="fa-solid fa-mug-hot text-3xl mb-2 text-emerald-400"></i>
+             <p className="text-xs font-bold uppercase">Kho việc đã sạch bách!</p>
           </div>
         ) : (
-          Object.keys(khoViec).map(soGCS => (
-            <div key={soGCS} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
-              <div className="bg-slate-100 px-3 py-2 border-b border-slate-200">
-                <span className="text-[10px] font-black text-slate-700 uppercase bg-slate-200 px-2 py-0.5 rounded">SỔ {soGCS}</span>
+          Object.keys(khoViec).sort().map(nhom => {
+            const danhSachCa = khoViec[nhom];
+            // Render Icon dựa trên việc đó là Trạm hay Tuyến trung thế
+            const isTram = nhom.toLowerCase().includes('trạm');
+            return (
+              <div key={nhom} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
+                <div className={`px-3 py-2 border-b flex justify-between items-center ${isTram ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'}`}>
+                  <span className={`text-xs font-black uppercase ${isTram ? 'text-amber-800' : 'text-blue-800'}`}>
+                    <i className={`fa-solid ${isTram ? 'fa-transformer text-amber-500' : 'fa-bolt text-blue-500'} mr-2`}></i>
+                    {nhom}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded shadow-sm">{danhSachCa.length} ca</span>
+                </div>
+                
+                <div className="p-2">
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Giao nguyên cụm cho:</span>
+                    {DANH_SACH_THO.map(tho => (
+                      <button 
+                        key={tho} 
+                        onClick={() => handleGiaoCumTru(danhSachCa, tho)}
+                        className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 px-2 py-1.5 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 flex-1 justify-center"
+                      >
+                        {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              
-              <div className="p-2 space-y-2">
-                {Object.keys(khoViec[soGCS]).map(cumTru => {
-                  const danhSachCa = khoViec[soGCS][cumTru];
-                  return (
-                    <div key={cumTru} className="border border-blue-100 bg-blue-50/30 rounded-lg p-2 relative group">
-                      <div className="flex justify-between items-center mb-2">
-                        <div>
-                          <h4 className="font-bold text-blue-800 text-sm"><i className="fa-solid fa-bolt text-yellow-500 mr-1"></i> {cumTru.includes('Tuyến') || cumTru === 'Cụm Lẻ' ? cumTru : `Tuyến ${cumTru}`}</h4>
-                          <p className="text-[10px] text-slate-500 font-medium">Bao gồm {danhSachCa.length} ca</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-1.5 border-t border-blue-100 pt-2 mt-1">
-                        <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Đẩy nhanh vào giỏ:</span>
-                        {DANH_SACH_THO.map(tho => (
-                          <button 
-                            key={tho} 
-                            onClick={() => handleGiaoCumTru(danhSachCa, tho)}
-                            className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1"
-                          >
-                            {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
 
@@ -326,15 +306,14 @@ export default function PhanCongDashboard() {
             </div>
             
             <div className="p-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold text-center border-b border-yellow-200">
-              <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca lẻ bên dưới để điều chuyển qua thợ khác
+              <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca lẻ để điều chuyển
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
               {gioViec[activeWorkerCart]?.length === 0 ? (
                 <p className="text-center text-slate-400 text-xs mt-10 italic">Giỏ hàng trống.</p>
               ) : (
-                /* CHỖ NÀY ĐÃ ĐƯỢC CẬP NHẬT ĐỂ SỬ DỤNG ma_tru_sach THAY VÌ GỌI HÀM CŨ */
-                [...gioViec[activeWorkerCart]].sort((a,b) => a.ma_tru_sach.localeCompare(b.ma_tru_sach)).map(c => (
+                [...gioViec[activeWorkerCart]].sort((a,b) => a.nhom_phan_cong.localeCompare(b.nhom_phan_cong)).map(c => (
                   <div 
                     key={c.id} 
                     onClick={() => toggleMicroTask(c.id)}
@@ -345,13 +324,13 @@ export default function PhanCongDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between mb-0.5">
-                        <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[100px]" title={c.ma_tru_sach}>
+                        <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[120px]" title={c.ma_tru_sach}>
                           <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}
                         </span>
-                        <span className="font-mono font-bold text-[10px] text-blue-700">{c.ma_pe}</span>
+                        <span className="font-mono font-bold text-[10px] text-blue-700 bg-blue-50 px-1 rounded">{c.ma_pe}</span>
                       </div>
                       <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
-                      <p className="text-[10px] text-slate-500 mt-0.5"><i className="fa-regular fa-calendar mr-1"></i>Kỳ: {c.ky_hoa_don} - Đang: {c.trang_thai_hien_tai}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Nhóm: {c.nhom_phan_cong}</p>
                       <p className="text-[11px] font-black text-red-500 mt-0.5">
                         <i className="fa-solid fa-money-bill-wave mr-1"></i> 
                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(c.so_tien || 0)}
@@ -365,7 +344,7 @@ export default function PhanCongDashboard() {
             {selectedMicroTasks.length > 0 && (
               <div className="bg-white border-t border-slate-200 p-3 shrink-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] slide-up">
                 <div className="text-[10px] font-bold text-slate-500 mb-2 text-center uppercase tracking-wider">
-                  Chuyển {selectedMicroTasks.length} ca này sang cho:
+                  Chuyển {selectedMicroTasks.length} ca sang:
                 </div>
                 <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
                   {DANH_SACH_THO.filter(t => t !== activeWorkerCart).map(thoNhan => (
