@@ -40,11 +40,12 @@ export default function PhanCongDashboard() {
       const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
       setDanhMucTienTo(tienToData || []);
 
-      // Tải danh sách đốc thu (Nạp thêm cả ca Cắt điện và Xác minh để đếm đủ 4 thẻ)
+      // Tải danh sách đốc thu (Chỉ lấy các ca CÒN MỞ PHIÊN của ngày hôm nay/chưa chốt sổ)
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh']);
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'])
+        .eq('is_active', true); // <--- THÊM MÀNG LỌC NÀY ĐỂ LOẠI BỎ SỐ LIỆU RÁC NGÀY HÔM QUA
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
