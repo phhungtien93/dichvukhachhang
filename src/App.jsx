@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import QuanLyDanhSach from './components/QuanLyDanhSach';
 import ThongKeDashboard from './components/ThongKeDashboard';
 import PhanCongDashboard from './components/PhanCongDashboard';
+import GiaoDienTho from './components/GiaoDienTho';
 import { Toaster } from 'react-hot-toast';
 import { supabase } from './supabase'; // Bổ sung thư viện kết nối
 
 function App() {
   const [activeTab, setActiveTab] = useState('danhsach');
+  const [view, setView] = useState('doi-truong');
   const [session, setSession] = useState(null); // Thêm biến theo dõi đăng nhập
 
   // Kích hoạt radar lắng nghe trạng thái đăng nhập từ Supabase
@@ -26,14 +28,38 @@ function App() {
     <div className="h-screen flex flex-col bg-slate-50">
       
       {/* NỘI DUNG CHÍNH */}
-      <div className="flex-1 overflow-y-auto pb-28 w-full h-full">
-        {activeTab === 'phancong' && <PhanCongDashboard />}
-        {activeTab === 'danhsach' && <QuanLyDanhSach />}
-        {activeTab === 'thongke' && <ThongKeDashboard />}
+      {/* NỘI DUNG CHÍNH */}
+      <div className="flex-1 overflow-y-auto pb-28 w-full h-full relative">
+        {/* NẾU LÀ ĐỘI TRƯỞNG THÌ HIỆN 3 TAB GỐC, NẾU LÀ THỢ THÌ HIỆN APP THỢ */}
+        {view === 'doi-truong' ? (
+          <>
+            {activeTab === 'phancong' && <PhanCongDashboard />}
+            {activeTab === 'danhsach' && <QuanLyDanhSach />}
+            {activeTab === 'thongke' && <ThongKeDashboard />}
+          </>
+        ) : (
+          <GiaoDienTho />
+        )}
+
+        {/* NÚT CHUYỂN GIAO DIỆN (ĐỂ TEST) - Treo nổi góc phải màn hình */}
+        <div className="fixed bottom-24 right-4 z-[70] flex flex-col gap-2 shadow-2xl rounded-xl bg-slate-800/90 p-2 fade-in">
+          <button 
+            onClick={() => setView('doi-truong')} 
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${view === 'doi-truong' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'}`}
+          >
+            Trang Đội Trưởng
+          </button>
+          <button 
+            onClick={() => setView('tho')} 
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${view === 'tho' ? 'bg-yellow-500 text-white' : 'text-slate-300 hover:text-white'}`}
+          >
+            App Thợ Đi Tuyến
+          </button>
+        </div>
       </div>
 
       {/* THANH MENU: ĐƯỢC BỌC TRONG {session && ...} ĐỂ CHỈ HIỆN KHI ĐÃ ĐĂNG NHẬP */}
-      {session && (
+      {session && view === 'doi-truong' && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-x border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] rounded-t-xl fade-in">
           <div className="flex justify-around items-center h-16">
 
