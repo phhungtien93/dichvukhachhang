@@ -20,8 +20,10 @@ export default function PhanCongDashboard() {
   const [expandedGroups, setExpandedGroups] = useState({}); // State lưu trạng thái đóng/mở chi tiết
   // === CHÈN THÊM STATE NÀY NGAY DƯỚI expandedGroups ===
   const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
-  // === CHÈN THÊM BIẾN NÀY ===
   const [overviewTab, setOverviewTab] = useState('hen_lai'); // 'hen_lai' hoặc 'da_thu'
+  const [isBacklogExpanded, setIsBacklogExpanded] = useState(false);
+  const [backlogTab, setBacklogTab] = useState('hen_lai'); // 'hen_lai' hoặc 'chua_xu_ly
+
 
   const toggleGroup = (soGCS, nhom) => {
     const groupId = `${soGCS}-${nhom}`;
@@ -178,19 +180,25 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. TẠO KHO VIỆC 2 TẦNG (SỔ GCS -> TRẠM/TUYẾN) ĐÚNG CHUẨN NGHIỆP VỤ
-  // Loại bỏ ca 'da_thu' để không hiển thị lại ở Kho Việc và Giỏ Việc
-  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu');
+  // === THAY THẾ TOÀN BỘ KHỐI LOGIC KHO VIỆC BẰNG ĐOẠN NÀY ===
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0); // Mốc 00:00 ngày hôm nay
+
+  // 1. Phân loại Hàng tồn đọng từ hôm qua chuyển sang (Chỉ lấy các ca tạo trước 00:00 hôm nay)
+  const tonDongHenLai = danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai' && new Date(c.created_at) < todayMidnight);
+  const tonDongChuaLam = danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly' && new Date(c.created_at) < todayMidnight);
+  const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
+
+  // 2. Phân loại việc của ngày hôm nay (Excel mới nạp hoặc ca được tạo trong ngày)
+  const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu' && new Date(c.created_at) >= todayMidnight);
   const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && c.trang_thai_hien_tai !== 'da_thu');
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
     const soGCS = c.so_gcs || 'Chưa rõ Sổ';
-    const nhom = c.nhom_phan_cong; // Đây là tên Trạm hoặc tên Tuyến
-    
+    const nhom = c.nhom_phan_cong;
     if (!khoViec[soGCS]) khoViec[soGCS] = {};
     if (!khoViec[soGCS][nhom]) khoViec[soGCS][nhom] = [];
-    
     khoViec[soGCS][nhom].push(c);
   });
 
@@ -370,7 +378,103 @@ export default function PhanCongDashboard() {
           )}
         </div>
         {/* ================= KẾT THÚC KHU VỰC TỔNG QUAN ================= */}
-        <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-2">
+
+        {/* ================= BẮT ĐẦU KHỐI TỒN ĐỌNG NGÀY HÔM QUA ================= */}
+        {(tonDongHenLai.length > 0 || tonDongChuaLam.length > 0) && (
+          <div className="bg-white rounded-xl shadow-sm border-2 border-dashed border-rose-200 overflow-hidden mb-3 fade-in shrink-0">
+            <button
+              onClick={() => setIsBacklogExpanded(!isBacklogExpanded)}
+              className="w-full flex justify-between items-center p-3 bg-rose-50/60 hover:bg-rose-100/60 transition-colors"
+            >
+              <h3 className="text-xs font-black text-rose-800 uppercase tracking-wider flex items-center gap-2">
+                <i className="fa-solid fa-triangle-exclamation text-rose-500 animate-pulse"></i> 
+                Hàng Tồn Đọng Ngày Hôm Qua ({tonDongHenLai.length + tonDongChuaLam.length} ca)
+              </h3>
+              <i className={`fa-solid fa-chevron-down text-rose-500 transition-transform ${isBacklogExpanded ? 'rotate-180' : ''}`}></i>
+            </button>
+
+            {isBacklogExpanded && (
+              <div className="p-3 border-t border-rose-100 bg-slate-50/50 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  
+                  {/* Tab nhỏ 1: Hẹn lại */}
+                  <div 
+                    onClick={() => setBacklogTab('hen_lai')}
+                    className={`border rounded-xl p-2.5 text-center cursor-pointer transition-all ${
+                      backlogTab === 'hen_lai' ? 'bg-orange-100 border-orange-400 ring-1 ring-orange-400 font-bold' : 'bg-white border-slate-200 opacity-60'
+                    }`}
+                  >
+                    <div className="text-lg font-black text-orange-700">{tonDongHenLai.length}</div>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold">Khách hẹn lại</p>
+                  </div>
+
+                  {/* Tab nhỏ 2: Chưa xử lý */}
+                  <div 
+                    onClick={() => setBacklogTab('chua_xu_ly')}
+                    className={`border rounded-xl p-2.5 text-center cursor-pointer transition-all ${
+                      backlogTab === 'chua_xu_ly' ? 'bg-red-100 border-red-400 ring-1 ring-red-400 font-bold' : 'bg-white border-slate-200 opacity-60'
+                    }`}
+                  >
+                    <div className="text-lg font-black text-red-700">{tonDongChuaLam.length}</div>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold">Bỏ sót / Chưa làm</p>
+                  </div>
+                </div>
+
+                {/* Chi tiết danh sách hàng tồn */}
+                <div className="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar pt-1">
+                  {danhSachTonDongHienThi.map(c => (
+                    <div key={c.id} className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1 text-[10px] slide-up">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800 truncate max-w-[150px]">{c.ten_kh}</span>
+                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[8px] font-black border border-slate-200 uppercase">
+                          Cũ: {c.nguoi_phu_trach || 'Chưa giao'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center text-slate-500 mt-0.5">
+                        <div className="flex gap-1.5 items-center">
+                          <button 
+                            onClick={() => { navigator.clipboard.writeText(c.ma_pe); toast.success(`Đã copy: ${c.ma_pe}`); }}
+                            className="font-mono font-bold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 flex items-center"
+                          >
+                            <i className="fa-regular fa-copy mr-1"></i>{c.ma_pe}
+                          </button>
+
+                          {c.so_dien_thoai ? (
+                            <a href={`tel:${c.so_dien_thoai}`} className="font-medium text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 flex items-center">
+                              <i className="fa-solid fa-phone mr-1"></i>{c.so_dien_thoai}
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 bg-slate-50 px-1 py-0.5 rounded border border-slate-100">Không SĐT</span>
+                          )}
+                        </div>
+                        <span className="font-mono text-slate-400 font-bold"><i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}</span>
+                      </div>
+
+                      {/* Nút tái phân công nhanh cho ca tồn đọng chưa xử lý */}
+                      {backlogTab === 'chua_xu_ly' && (
+                        <div className="flex gap-1 mt-1.5 border-t pt-1.5 overflow-x-auto no-scrollbar">
+                          {DANH_SACH_THO.map(tho => (
+                            <button
+                              key={tho}
+                              onClick={() => handleGiaoCumTru([c], tho)}
+                              className="bg-slate-50 hover:bg-blue-50 border border-slate-200 text-slate-600 px-2 py-1 rounded text-[9px] font-bold shrink-0"
+                            >
+                              Giao {tho}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {/* ================= KẾT THÚC KHU VỰC TỒN ĐỌNG ================= */}
+
+        <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-2 mt-1">
           <i className="fa-solid fa-layer-group"></i> Kho Việc 
         </h3>
         
