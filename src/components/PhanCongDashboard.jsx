@@ -208,7 +208,9 @@ export default function PhanCongDashboard() {
   // 3. Phân loại Giỏ Việc Thợ
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+  
+  // ÉP BUỘC Giỏ Việc chỉ được chứa các ca của ngày hôm nay (caHomNay). Qua ngày mới tự động sạch bách!
+  const caDaGiao = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
@@ -226,14 +228,24 @@ export default function PhanCongDashboard() {
     gioViec[c.nguoi_phu_trach].push(c);
   });
 
-  // 4. CHỨC NĂNG CHIA CA
+  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời cho ca tồn đọng)
   const handleGiaoCumTru = async (danhSachCa, tenTho) => {
     const ids = danhSachCa.map(c => c.id);
+    const isoNow = new Date().toISOString(); // Bắt mốc thời gian hiện tại
     const toastId = toast.loading(`Giao ${ids.length} ca cho ${tenTho}...`);
+    
     try {
-      const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho }).in('id', ids);
+      // Vừa đổi tên thợ, vừa Cập nhật ngày nạp dữ liệu để ca tồn đọng "tái sinh" thành ca hôm nay
+      const { error } = await supabase
+        .from('danh_sach_doc_thu')
+        .update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow })
+        .in('id', ids)
+        .eq('is_active', true);
+        
       if (error) throw error;
-      setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho } : c));
+      
+      // Cập nhật ngay trên giao diện để hết giật lag
+      setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow } : c));
       toast.success(`Xong!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi khi phân công', { id: toastId });
@@ -244,11 +256,19 @@ export default function PhanCongDashboard() {
 
   const handleChuyenGiaoCaLe = async (tenThoNhan) => {
     if (selectedMicroTasks.length === 0) return;
+    const isoNow = new Date().toISOString();
     const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
+    
     try {
-      const { error } = await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan }).in('id', selectedMicroTasks);
+      const { error } = await supabase
+        .from('danh_sach_doc_thu')
+        .update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow })
+        .in('id', selectedMicroTasks)
+        .eq('is_active', true);
+        
       if (error) throw error;
-      setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan } : c));
+      
+      setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow } : c));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
