@@ -190,8 +190,8 @@ export default function PhanCongDashboard() {
   const tonDongChuaLam = danhSach.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly' && new Date(c.created_at) < todayMidnight);
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Phân loại việc của ngày hôm nay (Loại bỏ tất cả các ca Đã thu, Đã cắt, Đã xác minh khỏi kho việc)
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'];
+  // 2. Phân loại việc của ngày hôm nay (Đã đẩy Khách Hẹn cho văn phòng quản lý nên tính là xong với thợ)
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
   const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai) && new Date(c.created_at) >= todayMidnight);
   const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
