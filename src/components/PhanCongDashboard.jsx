@@ -54,18 +54,26 @@ export default function PhanCongDashboard() {
         // Chuẩn hóa dữ liệu từ cột Excel sang cột trong Database
         const danhSachNhap = jsonData.map(row => {
           let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '';
-          let phone = row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || ''; // Vẫn chừa đường lùi nếu file có cột SĐT
+          let phone = row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || '';
           let cleanName = rawName;
 
-          // THUẬT TOÁN BÓC TÁCH SỐ ĐIỆN THOẠI TỪ TÊN
-          // Tìm cụm có chứa chữ DT, ĐT, SĐT kèm theo dãy số dài 9-11 số
+          // THUẬT TOÁN 1: BÓC TÁCH SỐ ĐIỆN THOẠI TỪ TÊN
           const phoneMatch = rawName.match(/(?:\(|\[)?(?:DT|ĐT|SĐT)[:\s]*([0-9]{9,11})(?:\)|\])?/i);
-          
           if (phoneMatch && phoneMatch[1]) {
-            phone = phoneMatch[1]; // Lấy đúng dãy số điện thoại
-            // Cắt bỏ cụm (DT:098...) ra khỏi tên để giao diện gọn gàng
+            phone = phoneMatch[1];
             cleanName = rawName.replace(phoneMatch[0], '').trim();
           }
+
+          // THUẬT TOÁN 2: LÀM SẠCH SỐ TIỀN (Xóa dấu phẩy, chấm, chữ VNĐ)
+          let rawTien = row['SỐ TIỀN'] || row['Số tiền'] || row['SO_TIEN'] || row['TỔNG TIỀN'] || 0;
+          let cleanTien = 0;
+          if (typeof rawTien === 'string') {
+            // Xóa tất cả các ký tự không phải là số
+            cleanTien = parseInt(rawTien.replace(/[^0-9]/g, ''), 10);
+          } else if (typeof rawTien === 'number') {
+            cleanTien = rawTien;
+          }
+          if (isNaN(cleanTien)) cleanTien = 0;
 
           return {
             ma_pe: row['MÃ PE'] || row['MA_PE'] || row['Mã khách hàng'] || '',
@@ -74,6 +82,7 @@ export default function PhanCongDashboard() {
             so_dien_thoai: phone,
             so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
             ky_hoa_don: row['KỲ HÓA ĐƠN'] || row['Kỳ hóa đơn'] || row['KY_HOA_DON'] || 'Chưa rõ kỳ',
+            so_tien: cleanTien, // BƠM SỐ TIỀN ĐÃ LÀM SẠCH VÀO ĐÂY
             trang_thai_hien_tai: 'chua_xu_ly', 
             nguoi_phu_trach: null
           };
