@@ -8,20 +8,26 @@ const DANH_SACH_THO = ['Anh A', 'Anh B', 'Anh C', 'Anh D'];
 export default function PhanCongDashboard() {
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
+  
+  // Lưu 2 bộ từ điển
   const [danhMucTram, setDanhMucTram] = useState([]);
+  const [danhMucTienTo, setDanhMucTienTo] = useState([]); 
   
   const [activeWorkerCart, setActiveWorkerCart] = useState(null);
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
   const fileInputRef = useRef(null);
 
-  // 1. TẢI DỮ LIỆU ĐỒNG THỜI TỪ 2 BẢNG
+  // 1. TẢI TOÀN BỘ TỪ ĐIỂN VÀ DỮ LIỆU CÙNG LÚC
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Tải từ điển trạm
-      const { data: tramData, error: tramErr } = await supabase.from('danh_muc_tram').select('*');
-      if (tramErr) throw tramErr;
+      // Tải từ điển Trạm Hạ thế
+      const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
       setDanhMucTram(tramData || []);
+
+      // Tải từ điển Dịch mã xuất tuyến (PB1204 -> CĐ)
+      const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
+      setDanhMucTienTo(tienToData || []);
 
       // Tải danh sách đốc thu (Chỉ ca chưa xử lý hoặc hẹn lại)
       const { data: dsData, error: dsErr } = await supabase
@@ -29,7 +35,6 @@ export default function PhanCongDashboard() {
         .select('*')
         .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
       if (dsErr) throw dsErr;
-      
       setDanhSach(dsData || []);
     } catch (error) {
       toast.error('Lỗi kết nối cơ sở dữ liệu!');
@@ -48,16 +53,13 @@ export default function PhanCongDashboard() {
     let str = address.toUpperCase().replace(/ẤTRỤ/g, 'TRỤ');
     str = str.replace(/([A-ZĐ0-9])(XÃ|ẤP|KHÓM|PHƯỜNG|TỔ|HUYỆN|TỈNH|THỊ|KCN)/g, '$1 $2');
 
-    // Lấy chuỗi nằm sau chữ TRỤ cuối cùng
     const allPoles = [...str.matchAll(/TRỤ\s+([A-ZĐ0-9/.\-]+)/g)];
     let pole = allPoles.length > 0 ? allPoles[allPoles.length - 1][1].replace(/[.,;]+$/, '') : 'Không rõ trụ';
 
-    // Nếu có tuyến gốc, thử dịch mã gõ tắt (1/, 5/, 8/)
     if (tuyenGoc && pole !== 'Không rõ trụ') {
-      const matchShorthand = pole.match(/^(\d+)\//); // Tìm số đứng trước dấu /
+      const matchShorthand = pole.match(/^(\d+)\//); 
       if (matchShorthand) {
         const shortNum = matchShorthand[1];
-        // Nếu số gõ tắt (VD: 5) trùng với số của tuyến mẹ (VD: 475) thì thay thế
         if (tuyenGoc.includes(shortNum)) {
           pole = pole.replace(`${shortNum}/`, `${tuyenGoc}/`);
         }
@@ -66,7 +68,7 @@ export default function PhanCongDashboard() {
     return pole;
   };
 
-  // 2. NHAI EXCEL VÀ LÀM GIÀU DỮ LIỆU TẠI NGUỒN
+  // 2. NHAI EXCEL VÀ DỊCH MÃ TUYẾN
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -82,7 +84,6 @@ export default function PhanCongDashboard() {
         const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
         const danhSachNhap = jsonData.map(row => {
-          // A. Làm sạch cơ bản (Tên, Số điện thoại, Tiền)
           let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || '';
           let phone = '';
           const phoneMatch = rawName.match(/(?:\(|\[)?(?:DT|ĐT|SĐT)[:\s]*([0-9]{9,11})(?:\)|\])?/i);
@@ -94,29 +95,48 @@ export default function PhanCongDashboard() {
           let rawTien = row['SỐ TIỀN'] || row['TỔNG TIỀN'] || 0;
           let cleanTien = typeof rawTien === 'string' ? parseInt(rawTien.replace(/[^0-9]/g, ''), 10) : rawTien;
 
-          // B. Lấy các thông số điều hướng
           const soGCS = row['SỔ GCS'] || '';
           const rawAddress = row['ĐỊA CHỈ'] || '';
-          const tuyenExcel = row['TUYẾN'] || row['MÃ LƯỚI'] || '';
+          const tuyenExcel = row['TUYẾN'] || row['MÃ LƯỚI'] || row['MÃ XUẤT TUYẾN'] || '';
 
-          // C. BỘ NÃO NHÓM DỮ LIỆU CHÍNH (Kết hợp Trạm và VLOOKUP)
           let nhomPhanCong = 'Cụm Lẻ';
           let maTruSach = 'Không rõ trụ';
 
-          // Đối chiếu Sổ GCS với Bảng Danh mục Trạm
+          // A. LỌC QUA SỔ GCS (TRẠM HẠ THẾ)
           const tramKhop = danhMucTram.find(t => t.so_gcs == soGCS);
 
           if (tramKhop) {
-            // CA 1: KHÁCH HÀNG THUỘC TRẠM CÔNG CỘNG (Ánh sáng sinh hoạt)
             nhomPhanCong = tramKhop.ten_tram; 
             maTruSach = extractAndFixPole(rawAddress, tramKhop.tuyen_goc);
-          } else if (tuyenExcel) {
-            // CA 2: KHÁCH HÀNG TRUNG THẾ ĐỘC LẬP (Sử dụng dữ liệu VLOOKUP từ CMIS)
-            const tuyenChuan = tuyenExcel.toUpperCase().replace(/TUYẾN\s*/g, '');
-            nhomPhanCong = `Tuyến ${tuyenChuan}`;
-            maTruSach = extractAndFixPole(rawAddress, tuyenChuan);
-          } else {
-            // CA 3: LỌT SÀNG (Đẩy vào Cụm lẻ)
+          } 
+          // B. LỌC QUA MÃ XUẤT TUYẾN (TRUNG THẾ ĐỘC LẬP)
+          else if (tuyenExcel) {
+            let tuyenChuan = tuyenExcel.toUpperCase().trim();
+            
+            // Cỗ máy dịch thuật: Tìm cấu trúc PBxxxx + Số (VD: PB1204474)
+            const matchDichMa = tuyenChuan.match(/^(PB\d{4})(\d+)$/i);
+            
+            if (matchDichMa) {
+              const tienTo = matchDichMa[1]; // Lấy PB1204
+              const soTuyen = matchDichMa[2]; // Lấy 474
+              
+              // Tra từ điển xem PB1204 là CD hay CĐ
+              const tuDien = danhMucTienTo.find(d => d.ma_tien_to === tienTo);
+              
+              if (tuDien) {
+                // Ráp 474 + CĐ => 474CĐ
+                tuyenChuan = `${soTuyen}${tuDien.hau_to}`;
+              }
+            } else {
+              // Nếu xuất file không có PB mà ghi thẳng Tuyến 474CD thì dọn dẹp bớt chữ "Tuyến"
+              tuyenChuan = tuyenChuan.replace(/TUYẾN\s*/g, '');
+            }
+
+            nhomPhanCong = `Tuyến ${tuyenChuan}`; // Hiện trên UI: Tuyến 474CĐ
+            maTruSach = extractAndFixPole(rawAddress, tuyenChuan); // Truyền 474CĐ vào để hóa giải số gõ tắt (nếu có)
+          } 
+          // C. LỌT SÀNG (ĐẨY VÀO CỤM LẺ)
+          else {
             maTruSach = extractAndFixPole(rawAddress, null);
           }
 
@@ -128,8 +148,8 @@ export default function PhanCongDashboard() {
             so_gcs: soGCS,
             ky_hoa_don: row['KỲ HÓA ĐƠN'] || 'Chưa rõ',
             so_tien: isNaN(cleanTien) ? 0 : cleanTien,
-            nhom_phan_cong: nhomPhanCong,  // LƯU KẾT QUẢ ĐÃ GOM NHÓM
-            ma_tru_sach: maTruSach,        // LƯU KẾT QUẢ TRỤ ĐÃ RỬA
+            nhom_phan_cong: nhomPhanCong,  
+            ma_tru_sach: maTruSach,        
             trang_thai_hien_tai: 'chua_xu_ly', 
             nguoi_phu_trach: null
           };
@@ -153,7 +173,7 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. TẠO KHO VIỆC (Bây giờ code nhẹ tênh vì data đã được rửa sạch)
+  // 3. TẠO KHO VIỆC
   const caChuaGiao = danhSach.filter(c => !c.nguoi_phu_trach);
   const caDaGiao = danhSach.filter(c => c.nguoi_phu_trach);
 
@@ -233,7 +253,6 @@ export default function PhanCongDashboard() {
         ) : (
           Object.keys(khoViec).sort().map(nhom => {
             const danhSachCa = khoViec[nhom];
-            // Render Icon dựa trên việc đó là Trạm hay Tuyến trung thế
             const isTram = nhom.toLowerCase().includes('trạm');
             return (
               <div key={nhom} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
