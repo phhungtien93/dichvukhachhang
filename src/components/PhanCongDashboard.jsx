@@ -51,16 +51,33 @@ export default function PhanCongDashboard() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        const danhSachNhap = jsonData.map(row => ({
-          ma_pe: row['MÃ PE'] || row['MA_PE'] || row['Mã khách hàng'] || '',
-          ten_kh: row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '',
-          dia_chi: row['ĐỊA CHỈ'] || row['DIA_CHI'] || row['Địa chỉ'] || '',
-          so_dien_thoai: row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || '',
-          so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
-          ky_hoa_don: row['KỲ HÓA ĐƠN'] || row['Kỳ hóa đơn'] || row['KY_HOA_DON'] || 'Chưa rõ kỳ',
-          trang_thai_hien_tai: 'chua_xu_ly', 
-          nguoi_phu_trach: null
-        })).filter(item => item.ma_pe);
+        // Chuẩn hóa dữ liệu từ cột Excel sang cột trong Database
+        const danhSachNhap = jsonData.map(row => {
+          let rawName = row['TÊN KHÁCH HÀNG'] || row['TEN_KH'] || row['Tên khách hàng'] || '';
+          let phone = row['SĐT'] || row['SO_DIEN_THOAI'] || row['Điện thoại'] || ''; // Vẫn chừa đường lùi nếu file có cột SĐT
+          let cleanName = rawName;
+
+          // THUẬT TOÁN BÓC TÁCH SỐ ĐIỆN THOẠI TỪ TÊN
+          // Tìm cụm có chứa chữ DT, ĐT, SĐT kèm theo dãy số dài 9-11 số
+          const phoneMatch = rawName.match(/(?:\(|\[)?(?:DT|ĐT|SĐT)[:\s]*([0-9]{9,11})(?:\)|\])?/i);
+          
+          if (phoneMatch && phoneMatch[1]) {
+            phone = phoneMatch[1]; // Lấy đúng dãy số điện thoại
+            // Cắt bỏ cụm (DT:098...) ra khỏi tên để giao diện gọn gàng
+            cleanName = rawName.replace(phoneMatch[0], '').trim();
+          }
+
+          return {
+            ma_pe: row['MÃ PE'] || row['MA_PE'] || row['Mã khách hàng'] || '',
+            ten_kh: cleanName,
+            dia_chi: row['ĐỊA CHỈ'] || row['DIA_CHI'] || row['Địa chỉ'] || '',
+            so_dien_thoai: phone,
+            so_gcs: row['SỔ GCS'] || row['SO_GCS'] || row['Sổ GCS'] || '',
+            ky_hoa_don: row['KỲ HÓA ĐƠN'] || row['Kỳ hóa đơn'] || row['KY_HOA_DON'] || 'Chưa rõ kỳ',
+            trang_thai_hien_tai: 'chua_xu_ly', 
+            nguoi_phu_trach: null
+          };
+        }).filter(item => item.ma_pe);
 
         if (danhSachNhap.length === 0) {
           toast.error('File Excel trống hoặc sai tên cột!');
