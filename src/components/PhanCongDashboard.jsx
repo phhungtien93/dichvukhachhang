@@ -18,6 +18,8 @@ export default function PhanCongDashboard() {
 
   // === CHÈN THÊM ĐOẠN NÀY ===
   const [expandedGroups, setExpandedGroups] = useState({}); // State lưu trạng thái đóng/mở chi tiết
+  // === CHÈN THÊM STATE NÀY NGAY DƯỚI expandedGroups ===
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   const toggleGroup = (soGCS, nhom) => {
     const groupId = `${soGCS}-${nhom}`;
@@ -245,6 +247,64 @@ export default function PhanCongDashboard() {
 
       {/* KHO VIỆC 2 TẦNG (GOM THEO SỔ GCS CHUẨN) */}
       <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+        {/* ================= BẮT ĐẦU CHÈN THÊM KHU VỰC TỔNG QUAN ================= */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
+          <button
+            onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+            className="w-full flex justify-between items-center p-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+          >
+            <h3 className="text-xs font-black text-blue-800 uppercase tracking-wider flex items-center gap-2">
+              <i className="fa-solid fa-chart-pie text-blue-500"></i> Tổng Quan Giao Dịch
+            </h3>
+            <i className={`fa-solid fa-chevron-down text-blue-500 transition-transform ${isOverviewExpanded ? 'rotate-180' : ''}`}></i>
+          </button>
+
+          {isOverviewExpanded && (
+            <div className="p-3 border-t border-blue-100 bg-slate-50 space-y-3 shadow-inner">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Khối Khách Hẹn Lại */}
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 shadow-sm relative overflow-hidden">
+                  <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
+                  <div className="relative z-10">
+                    <div className="font-black text-2xl text-orange-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').length}</div>
+                    <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wide">Khách hẹn lại</p>
+                    <p className="text-[9px] text-orange-600 mt-0.5 font-medium">Cần nhắc thợ đi thu</p>
+                  </div>
+                </div>
+
+                {/* Khối Đã Thu Tiền (Chờ chốt sổ) */}
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-sm relative overflow-hidden">
+                  <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
+                  <div className="relative z-10">
+                    {/* Tạm thời để số 0, sau này viết hàm Load ca 'da_thu' sẽ nhét biến vào đây */}
+                    <div className="font-black text-2xl text-emerald-700 mb-1">0</div>
+                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
+                    <p className="text-[9px] text-emerald-600 mt-0.5 font-medium">Chờ chốt sổ cuối ngày</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Danh sách các ca Hẹn lại chi tiết */}
+              {danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').length > 0 && (
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1.5"><i className="fa-solid fa-list-check"></i> Cần chú ý trong ngày:</p>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar">
+                    {danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').map(c => (
+                      <div key={c.id} className="bg-white p-2 rounded-lg border border-orange-100 shadow-sm flex flex-col gap-1 text-[10px]">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-slate-700">{c.ten_kh}</span>
+                          <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold border border-orange-200">{c.nguoi_phu_trach || 'Chưa giao'}</span>
+                        </div>
+                        <span className="text-slate-500 font-mono"><i className="fa-solid fa-hashtag mr-1"></i>{c.ma_pe}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* ================= KẾT THÚC KHU VỰC TỔNG QUAN ================= */}
         <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2 mb-2">
           <i className="fa-solid fa-layer-group"></i> Kho Việc 
         </h3>
