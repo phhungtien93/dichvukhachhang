@@ -20,6 +20,8 @@ export default function PhanCongDashboard() {
   const [expandedGroups, setExpandedGroups] = useState({}); // State lưu trạng thái đóng/mở chi tiết
   // === CHÈN THÊM STATE NÀY NGAY DƯỚI expandedGroups ===
   const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
+  // === CHÈN THÊM BIẾN NÀY ===
+  const [overviewTab, setOverviewTab] = useState('hen_lai'); // 'hen_lai' hoặc 'da_thu'
 
   const toggleGroup = (soGCS, nhom) => {
     const groupId = `${soGCS}-${nhom}`;
@@ -264,46 +266,106 @@ export default function PhanCongDashboard() {
           {isOverviewExpanded && (
             <div className="p-3 border-t border-blue-100 bg-slate-50 space-y-3 shadow-inner">
               <div className="grid grid-cols-2 gap-3">
-                {/* Khối Khách Hẹn Lại */}
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 shadow-sm relative overflow-hidden">
+                
+                {/* THẺ 1: KHÁCH HẸN LẠI - Bấm để chọn tab */}
+                <div 
+                  onClick={() => setOverviewTab('hen_lai')}
+                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
+                    overviewTab === 'hen_lai' 
+                      ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' 
+                      : 'bg-orange-50 border-orange-200 opacity-60'
+                  }`}
+                >
                   <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
                   <div className="relative z-10">
                     <div className="font-black text-2xl text-orange-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').length}</div>
-                    <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wide">Khách hẹn lại</p>
-                    <p className="text-[9px] text-orange-600 mt-0.5 font-medium">Cần nhắc thợ đi thu</p>
+                    <p className="text-[10px] font-black text-orange-800 uppercase tracking-wide">Khách hẹn lại</p>
+                    <p className="text-[9px] text-orange-600 mt-0.5 font-bold">Cần nhắc đi thu</p>
                   </div>
                 </div>
 
-                {/* Khối Đã Thu Tiền (Chờ chốt sổ) */}
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-sm relative overflow-hidden">
+                {/* THẺ 2: ĐÃ THU TIỀN - Bấm để chọn tab */}
+                <div 
+                  onClick={() => setOverviewTab('da_thu')}
+                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
+                    overviewTab === 'da_thu' 
+                      ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' 
+                      : 'bg-emerald-50 border-emerald-200 opacity-60'
+                  }`}
+                >
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-emerald-700 mb-1">
-                      {danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length}
-                    </div>
-                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
-                    <p className="text-[9px] text-emerald-600 mt-0.5 font-medium">Chờ chốt sổ cuối ngày</p>
+                    <div className="font-black text-2xl text-emerald-700 mb-1">{danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length}</div>
+                    <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">Đã thu tiền</p>
+                    <p className="text-[9px] text-emerald-600 mt-0.5 font-bold">Chờ văn phòng đối soát</p>
                   </div>
                 </div>
               </div>
 
-              {/* Danh sách các ca Hẹn lại chi tiết */}
-              {danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').length > 0 && (
-                <div className="mt-3 border-t border-slate-200 pt-3">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1.5"><i className="fa-solid fa-list-check"></i> Cần chú ý trong ngày:</p>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar">
-                    {danhSach.filter(c => c.trang_thai_hien_tai === 'hen_lai').map(c => (
-                      <div key={c.id} className="bg-white p-2 rounded-lg border border-orange-100 shadow-sm flex flex-col gap-1 text-[10px]">
+              {/* BẢNG HIỂN THỊ CHI TIẾT DANH SÁCH ĐỘNG THEO TAB */}
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+                  <i className={`fa-solid ${overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 'fa-money-bill-wave text-emerald-500'}`}></i> 
+                  Chi tiết: {overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 'Danh sách ca thợ đã thu xong'}
+                </p>
+                
+                <div className="space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
+                  {danhSach.filter(c => c.trang_thai_hien_tai === overviewTab).length === 0 ? (
+                    <p className="text-center text-slate-400 text-[10px] italic py-3 bg-white rounded-lg border border-slate-100">Hiện tại chưa có dữ liệu...</p>
+                  ) : (
+                    danhSach.filter(c => c.trang_thai_hien_tai === overviewTab).map(c => (
+                      <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${overviewTab === 'hen_lai' ? 'border-orange-100' : 'border-emerald-100'}`}>
+                        
+                        {/* Dòng 1: Tên KH & Thợ phụ trách */}
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-700">{c.ten_kh}</span>
-                          <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold border border-orange-200">{c.nguoi_phu_trach || 'Chưa giao'}</span>
+                          <span className="font-bold text-slate-800 text-[11px] truncate max-w-[170px]">{c.ten_kh}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${overviewTab === 'hen_lai' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            THỢ: {c.nguoi_phu_trach || 'CHƯA GIAO'}
+                          </span>
                         </div>
-                        <span className="text-slate-500 font-mono"><i className="fa-solid fa-hashtag mr-1"></i>{c.ma_pe}</span>
+                        
+                        {/* Dòng 2: Mã PE (Copy) | SĐT (Gọi) | Trụ */}
+                        <div className="flex justify-between items-center text-slate-500">
+                          <div className="flex gap-1.5 items-center">
+                            
+                            {/* Nút bấm COPY mã PE */}
+                            <button 
+                              onClick={() => { 
+                                navigator.clipboard.writeText(c.ma_pe); 
+                                toast.success(`Đã copy mã PE: ${c.ma_pe}`); 
+                              }}
+                              className="font-mono font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-blue-100 flex items-center"
+                              title="Bấm để copy mã PE"
+                            >
+                              <i className="fa-regular fa-copy mr-1 text-[9px]"></i>{c.ma_pe}
+                            </button>
+                            
+                            {/* Nút bấm GỌI ĐIỆN trực tiếp */}
+                            {c.so_dien_thoai ? (
+                              <a 
+                                href={`tel:${c.so_dien_thoai}`} 
+                                className="font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-emerald-100 flex items-center"
+                                title="Bấm để kích hoạt cuộc gọi"
+                              >
+                                <i className="fa-solid fa-phone mr-1 text-[9px]"></i>{c.so_dien_thoai}
+                              </a>
+                            ) : (
+                              <span className="font-medium text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center">
+                                <i className="fa-solid fa-phone-slash mr-1 text-[9px]"></i>Không SĐT
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Số hiệu vị trí vị trí cây ghim trụ bên phải */}
+                          <span className="font-mono text-slate-400 font-bold truncate max-w-[100px]" title={c.ma_tru_sach}>
+                            <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach || 'Cụm lẻ'}
+                          </span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    ))
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
