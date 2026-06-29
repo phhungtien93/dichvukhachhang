@@ -60,8 +60,8 @@ export default function GiaoDienTho() {
       // 3. CẦU NỐI ĐỒNG BỘ NÂNG CẤP: Bắn cả ca Cắt điện, Xác minh và Hẹn lại sang văn phòng
       if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien' || trangThaiMoi === 'hen_lai') {
         
-        // Ca 'hen_lai' và ca 'da_chuyen_xac_minh' đều đồng bộ về tab 'cho_xac_minh' của văn phòng
-        const trangThaiDich = (trangThaiMoi === 'hen_lai' || trangThaiMoi === 'da_chuyen_xac_minh') ? 'cho_xac_minh' : 'cho_cat';
+        // SỬA LỖI LOGIC: Thợ báo Cắt điện nghĩa là ĐÃ CẮT THỰC TẾ tại hiện trường (da_cat)
+        const trangThaiDich = (trangThaiMoi === 'hen_lai' || trangThaiMoi === 'da_chuyen_xac_minh') ? 'cho_xac_minh' : 'da_cat';
         
         const { data: checkKh } = await supabase.from('customers').select('id').eq('ma_pe', ca.ma_pe).single();
 
@@ -73,11 +73,15 @@ export default function GiaoDienTho() {
           so_tien_no: ca.so_tien || 0,
           ly_do_ngung: 'no_cuoc',
           trang_thai: trangThaiDich,
-          // Nếu là ca hẹn thì tạo tiêu đề ghi chú màu cam đặc trưng cho văn phòng nhận diện
           ghi_chu: trangThaiMoi === 'hen_lai' 
             ? `🕒 [KHÁCH HẸN ĐÓNG] Ghi nhận từ hiện trường bởi thợ ${thoHienTai}: ${ghiChu}` 
-            : `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
+            : `(Cập nhật tự động từ thao tác của thợ ${thoHienTai})`
         };
+
+        // ĐIỂM CỐT LÕI: Nếu là trạng thái ĐÃ CẮT, hệ thống tự động chốt luôn Giờ Cắt bằng giờ hiện tại
+        if (trangThaiDich === 'da_cat') {
+            payloadCustomer.ngay_cat = new Date().toISOString();
+        }
 
         let newCustomerId = null;
 
