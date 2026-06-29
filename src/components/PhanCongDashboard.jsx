@@ -16,6 +16,14 @@ export default function PhanCongDashboard() {
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
   const fileInputRef = useRef(null);
 
+  // === CHÈN THÊM ĐOẠN NÀY ===
+  const [expandedGroups, setExpandedGroups] = useState({}); // State lưu trạng thái đóng/mở chi tiết
+
+  const toggleGroup = (soGCS, nhom) => {
+    const groupId = `${soGCS}-${nhom}`;
+    setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+  
   // 1. TẢI DỮ LIỆU TỪ SUPABASE
   const fetchAllData = async () => {
     setLoading(true);
@@ -247,7 +255,15 @@ export default function PhanCongDashboard() {
              <p className="text-xs font-bold uppercase">Kho việc đã sạch bách!</p>
           </div>
         ) : (
-          Object.keys(khoViec).sort().map(soGCS => (
+          // Thay đổi 2: Thay dòng Object.keys(khoViec).sort().map(soGCS => (
+        // Bằng đoạn thuật toán sắp xếp thông minh này:
+        {Object.keys(khoViec).sort((a, b) => {
+          const aHasTram = Object.keys(khoViec[a]).some(nhom => nhom.toLowerCase().includes('trạm'));
+          const bHasTram = Object.keys(khoViec[b]).some(nhom => nhom.toLowerCase().includes('trạm'));
+          if (aHasTram && !bHasTram) return -1;
+          if (!aHasTram && bHasTram) return 1;
+          return a.localeCompare(b);
+        }).map(soGCS => (
             <div key={soGCS} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-3">
               {/* LỚP 1: SỔ GCS */}
               <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
@@ -256,12 +272,17 @@ export default function PhanCongDashboard() {
               
               {/* LỚP 2: CÁC TRẠM HOẶC TUYẾN BÊN TRONG SỔ */}
               <div className="p-2 space-y-2">
+                // Thay đổi 3: Thay thế toàn bộ khối return của nhóm (từ dòng 257 đến 281) bằng khối mới
                 {Object.keys(khoViec[soGCS]).sort().map(nhom => {
                   const danhSachCa = khoViec[soGCS][nhom];
                   const isTram = nhom.toLowerCase().includes('trạm');
                   
+                  // BẮT ĐẦU KHỐI UI MỚI CÓ NÚT XỔ XUỐNG
+                  const groupId = `${soGCS}-${nhom}`;
+                  const isExpanded = expandedGroups[groupId];
+
                   return (
-                    <div key={nhom} className={`border rounded-lg p-2 relative group ${isTram ? 'bg-amber-50/40 border-amber-100' : 'bg-blue-50/40 border-blue-100'}`}>
+                    <div key={nhom} className={`border rounded-lg p-2 relative group transition-all ${isTram ? 'bg-amber-50/40 border-amber-100' : 'bg-blue-50/40 border-blue-100'}`}>
                       <div className="flex justify-between items-center mb-2">
                         <div>
                           <h4 className={`font-bold text-sm ${isTram ? 'text-amber-800' : 'text-blue-800'}`}>
@@ -270,15 +291,40 @@ export default function PhanCongDashboard() {
                           </h4>
                           <p className="text-[10px] text-slate-500 font-medium">Bao gồm {danhSachCa.length} ca</p>
                         </div>
+                        {/* Nút đóng/mở */}
+                        <button 
+                          onClick={() => toggleGroup(soGCS, nhom)}
+                          className={`w-6 h-6 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 hover:text-blue-600 shadow-sm transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        >
+                          <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                        </button>
                       </div>
+
+                      {/* KHU VỰC CHI TIẾT (CHỈ HIỆN KHI BẤM NÚT) */}
+                      {isExpanded && (
+                        <div className={`mb-3 pt-2 border-t border-dashed space-y-1.5 ${isTram ? 'border-amber-200' : 'border-blue-200'}`}>
+                          {danhSachCa.map(ca => (
+                            <div key={ca.id} className="bg-white p-1.5 rounded border border-slate-100 shadow-sm text-[10px] slide-up">
+                              <div className="font-bold text-slate-700 truncate">{ca.ten_kh}</div>
+                              <div className="flex justify-between mt-1 text-slate-500">
+                                <span className="font-medium text-slate-400"><i className="fa-solid fa-phone mr-1"></i>{ca.so_dien_thoai || 'Trống'}</span>
+                                <span className="font-mono text-blue-600 font-bold truncate max-w-[120px]" title={ca.ma_tru_sach}>
+                                  <i className="fa-solid fa-location-dot mr-1"></i>{ca.ma_tru_sach}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       
+                      {/* CÁC NÚT ĐẨY VÀO GIỎ */}
                       <div className={`flex flex-wrap gap-1.5 border-t pt-2 mt-1 ${isTram ? 'border-amber-100' : 'border-blue-100'}`}>
                         <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Đẩy nhanh vào giỏ:</span>
                         {DANH_SACH_THO.map(tho => (
                           <button 
                             key={tho} 
                             onClick={() => handleGiaoCumTru(danhSachCa, tho)}
-                            className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1"
+                            className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 flex-1 justify-center"
                           >
                             {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
                           </button>
@@ -286,6 +332,7 @@ export default function PhanCongDashboard() {
                       </div>
                     </div>
                   )
+                  // KẾT THÚC KHỐI UI MỚI
                 })}
               </div>
             </div>
