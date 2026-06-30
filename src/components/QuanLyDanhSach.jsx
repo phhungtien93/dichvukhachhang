@@ -1011,34 +1011,34 @@ export default function QuanLyDanhSach() {
                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 mt-4 border-b pb-1">Mảng Nghiệp Vụ Thi Công Địa Bàn</h4>
                  {customerInfo?.trang_thai === 'cho_cat' && (
                     <div className="flex flex-col gap-2">
-                      {/* Nút 1: Cắt điện ngưng hơi */}
+                      {/* Nút 1: Cắt điện ngưng hơi (Màu đỏ pastel) */}
                       <button 
                         onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'da_cat')} 
-                        className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                        className="w-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
                       >
-                        <i className="fa-solid fa-scissors text-base"></i> Cắt điện ngưng hơi
+                        <i className="fa-solid fa-scissors text-base"></i> Xác nhận Đã Ngưng Hơi
                       </button>
 
-                      {/* Nút 2: Khách CK tại chỗ */}
+                      {/* Nút 2: Khách CK tại chỗ (Màu cam pastel) */}
                       <button 
                         onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'cho_xac_minh')} 
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                        className="w-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
                       >
                         <i className="fa-solid fa-money-bill-transfer text-base"></i> Khách chuyển khoản (Có Bill)
                       </button>
 
-                      {/* Nút 3: Đã thanh toán (Nợ = 0) */}
+                      {/* Nút 3: Đã thanh toán (Nợ = 0) (Màu xanh ngọc pastel) */}
                       <button 
                         onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')} 
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                        className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
                       >
-                        <i className="fa-solid fa-circle-check text-base"></i> Đã hết nợ trên hệ thống
+                        <i className="fa-solid fa-circle-check text-base"></i> Xác nhận Đã Đóng Tiền Cước
                       </button>
 
-                      {/* Nút 4: Báo trở ngại (Giữ nguyên của bạn) */}
+                      {/* Nút 4: Báo trở ngại (Màu tím pastel - Đã chỉnh lại py-3.5 cho đều nhau) */}
                       <button 
                         onClick={() => openActionModal('ht_tro_ngai', 'Báo cáo vướng mắc không thi công được')} 
-                        className="w-full bg-white text-purple-700 border border-purple-300 hover:bg-purple-50 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all mt-1"
+                        className="w-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
                       >
                         <i className="fa-solid fa-ban text-base"></i> Báo cáo Trở ngại (Khóa cổng...)
                       </button>
