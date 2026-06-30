@@ -44,8 +44,8 @@ export default function PhanCongDashboard() {
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen'])
-        .eq('is_active', true);
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'])
+        .eq('is_active', true); // <--- THÊM MÀNG LỌC NÀY ĐỂ LOẠI BỎ SỐ LIỆU RÁC NGÀY HÔM QUA
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
@@ -189,31 +189,32 @@ export default function PhanCongDashboard() {
   const caHomNay = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) >= todayMidnight);
   const caTonDong = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight);
 
-  // 1. Dành cho Khối TỒN ĐỌNG
-  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
+  // 1. Dành cho Khối TỒN ĐỌNG (Lấy từ caTonDong)
+  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai');
   const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Dành cho Khối TỔNG QUAN (Gộp hen_lai và da_bao_hen, thêm đếm Xác minh)
-  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
+  // 2. Dành cho Khối TỔNG QUAN (Vá lỗi đếm trùng hàng tồn)
+  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
   const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
   const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
-  const demXacMinh = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; // MỚI
 
   // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
-  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh;
-  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
+  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat;
+  // Số ca đã giải quyết = Đã thu + Đã cắt + Đã báo cáo hẹn lại
+  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
   const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
-    ? caHomNay.filter(c => overviewTab === 'hen_lai' ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') : c.trang_thai_hien_tai === 'chua_xu_ly') 
+    ? caHomNay.filter(c => c.trang_thai_hien_tai === overviewTab) 
     : danhSach.filter(c => c.trang_thai_hien_tai === overviewTab);
 
   // 3. Phân loại Giỏ Việc Thợ
-  // Đưa da_bao_hen vào list hoàn thành để biến mất khỏi app thợ, bỏ hen_lai ra để Đội trưởng giao việc lại thì thợ còn thấy
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen']; 
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+  
+  // ÉP BUỘC Giỏ Việc chỉ được chứa các ca của ngày hôm nay (caHomNay). Qua ngày mới tự động sạch bách!
   const caDaGiao = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
@@ -232,28 +233,24 @@ export default function PhanCongDashboard() {
     gioViec[c.nguoi_phu_trach].push(c);
   });
 
-  // 4. CHỨC NĂNG CHIA CA (Tích hợp Gia hạn vòng đời & Reset Hẹn Lại)
+  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời cho ca tồn đọng)
   const handleGiaoCumTru = async (danhSachCa, tenTho) => {
-    const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${tenTho}...`);
+    const ids = danhSachCa.map(c => c.id);
+    const isoNow = new Date().toISOString(); // Bắt mốc thời gian hiện tại
+    const toastId = toast.loading(`Giao ${ids.length} ca cho ${tenTho}...`);
     
     try {
-      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
-      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
-
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
-      }
-      // Reset ca da_bao_hen về lại hen_lai để app thợ đọc được
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
+      // Vừa đổi tên thợ, vừa Cập nhật ngày nạp dữ liệu để ca tồn đọng "tái sinh" thành ca hôm nay
+      const { error } = await supabase
+        .from('danh_sach_doc_thu')
+        .update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow })
+        .in('id', ids)
+        .eq('is_active', true);
+        
+      if (error) throw error;
       
-      setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
-      }));
+      // Cập nhật ngay trên giao diện để hết giật lag
+      setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow } : c));
       toast.success(`Xong!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi khi phân công', { id: toastId });
@@ -268,21 +265,15 @@ export default function PhanCongDashboard() {
     const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
     
     try {
-      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
-      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
-
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
-      }
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
+      const { error } = await supabase
+        .from('danh_sach_doc_thu')
+        .update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow })
+        .in('id', selectedMicroTasks)
+        .eq('is_active', true);
+        
+      if (error) throw error;
       
-      setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
-      }));
+      setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow } : c));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
@@ -338,7 +329,6 @@ export default function PhanCongDashboard() {
                 </div>
               </div>
 
-              {/* === LƯỚI 4 Ô CHỈ SỐ GÓP (TÍCH HỢP TỶ LỆ) === */}
               {/* === LƯỚI LỆCH 5 Ô (TÍCH HỢP TỶ LỆ) === */}
               <div className="grid grid-cols-2 gap-2.5">
                 
@@ -403,7 +393,7 @@ export default function PhanCongDashboard() {
                 </div>
               </div>
 
-              {/* BẢNG HIỂN THỊ CHI TIẾT DANH SÁCH */}
+              {/* === BẢNG HIỂN THỊ CHI TIẾT (ĐÃ GỘP LÀM 1 DUY NHẤT) === */}
               <div className="mt-3 border-t border-slate-200 pt-3">
                 <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
                   <i className={`fa-solid ${
@@ -462,90 +452,6 @@ export default function PhanCongDashboard() {
                             
                             {c.so_dien_thoai ? (
                               <a href={`tel:${c.so_dien_thoai}`} className="font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-emerald-100 flex items-center">
-                                <i className="fa-solid fa-phone mr-1 text-[9px]"></i>{c.so_dien_thoai}
-                              </a>
-                            ) : (
-                              <span className="font-medium text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center">
-                                <i className="fa-solid fa-phone-slash mr-1 text-[9px]"></i>Không SĐT
-                              </span>
-                            )}
-                          </div>
-                          
-                          <span className="font-mono text-slate-400 font-bold truncate max-w-[100px]" title={c.ma_tru_sach}>
-                            <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach || 'Cụm lẻ'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* BẢNG HIỂN THỊ CHI TIẾT DANH SÁCH ĐỘNG THEO TAB */}
-              <div className="mt-3 border-t border-slate-200 pt-3">
-                <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
-                  <i className={`fa-solid ${
-                    overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 
-                    overviewTab === 'da_thu' ? 'fa-money-bill-wave text-emerald-500' :
-                    overviewTab === 'da_chuyen_cat_dien' ? 'fa-scissors text-red-500' :
-                    'fa-file-circle-question text-blue-500'
-                  }`}></i> 
-                  Chi tiết: {
-                    overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 
-                    overviewTab === 'da_thu' ? 'Danh sách ca thợ đã thu xong' :
-                    overviewTab === 'da_chuyen_cat_dien' ? 'Danh sách khách hàng đã cắt điện' :
-                    'Danh sách hồ sơ chưa thực hiện'
-                  }
-                </p>
-                
-                <div className="space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
-                  {danhSachHienThiTongQuan.length === 0 ? (
-                    <p className="text-center text-slate-400 text-[10px] italic py-3 bg-white rounded-lg border border-slate-100">Hiện tại chưa có dữ liệu...</p>
-                  ) : (
-                    danhSachHienThiTongQuan.map(c => (
-                      <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${
-                        overviewTab === 'hen_lai' ? 'border-orange-100' : 
-                        overviewTab === 'da_thu' ? 'border-emerald-100' :
-                        overviewTab === 'da_chuyen_cat_dien' ? 'border-red-100' :
-                        'border-blue-100'
-                      }`}>
-                        
-                        {/* Dòng 1: Tên KH & Thợ phụ trách */}
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-800 text-[11px] truncate max-w-[170px]">{c.ten_kh}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${
-                            overviewTab === 'hen_lai' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
-                            overviewTab === 'da_thu' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                            overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-50 text-red-700 border-red-200' :
-                            'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}>
-                            THỢ: {c.nguoi_phu_trach || 'CHƯA GIAO'}
-                          </span>
-                        </div>
-                        
-                        {/* Dòng 2: Mã PE (Copy) | SĐT (Gọi) | Trụ */}
-                        <div className="flex justify-between items-center text-slate-500">
-                          <div className="flex gap-1.5 items-center">
-                            
-                            {/* Nút bấm COPY mã PE */}
-                            <button 
-                              onClick={() => { 
-                                navigator.clipboard.writeText(c.ma_pe); 
-                                toast.success(`Đã copy mã PE: ${c.ma_pe}`); 
-                              }}
-                              className="font-mono font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-blue-100 flex items-center"
-                              title="Bấm để copy mã PE"
-                            >
-                              <i className="fa-regular fa-copy mr-1 text-[9px]"></i>{c.ma_pe}
-                            </button>
-                            
-                            {/* Nút bấm GỌI ĐIỆN trực tiếp */}
-                            {c.so_dien_thoai ? (
-                              <a 
-                                href={`tel:${c.so_dien_thoai}`} 
-                                className="font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-emerald-100 flex items-center"
-                                title="Bấm để kích hoạt cuộc gọi"
-                              >
                                 <i className="fa-solid fa-phone mr-1 text-[9px]"></i>{c.so_dien_thoai}
                               </a>
                             ) : (
