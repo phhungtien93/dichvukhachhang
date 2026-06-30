@@ -4,14 +4,13 @@ import ThongKeDashboard from './components/ThongKeDashboard';
 import PhanCongDashboard from './components/PhanCongDashboard';
 import GiaoDienTho from './components/GiaoDienTho';
 import { Toaster } from 'react-hot-toast';
-import { supabase } from './supabase'; // Bổ sung thư viện kết nối
+import { supabase } from './supabase'; 
 
 function App() {
+  // Thay vì tách 'view', ta gộp tất cả vào activeTab. Mặc định mở Tab Điều Hành.
   const [activeTab, setActiveTab] = useState('danhsach');
-  const [view, setView] = useState('doi-truong');
-  const [session, setSession] = useState(null); // Thêm biến theo dõi đăng nhập
+  const [session, setSession] = useState(null); 
 
-  // Kích hoạt radar lắng nghe trạng thái đăng nhập từ Supabase
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -27,42 +26,20 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       
-      {/* NỘI DUNG CHÍNH */}
-      {/* NỘI DUNG CHÍNH */}
+      {/* KHU VỰC HIỂN THỊ NỘI DUNG CHÍNH DỰA VÀO TAB ĐƯỢC CHỌN */}
       <div className="flex-1 overflow-y-auto pb-28 w-full h-full relative">
-        {/* NẾU LÀ ĐỘI TRƯỞNG THÌ HIỆN 3 TAB GỐC, NẾU LÀ THỢ THÌ HIỆN APP THỢ */}
-        {view === 'doi-truong' ? (
-          <>
-            {activeTab === 'phancong' && <PhanCongDashboard />}
-            {activeTab === 'danhsach' && <QuanLyDanhSach />}
-            {activeTab === 'thongke' && <ThongKeDashboard />}
-          </>
-        ) : (
-          <GiaoDienTho />
-        )}
-
-        {/* NÚT CHUYỂN GIAO DIỆN (ĐỂ TEST) - Treo nổi góc phải màn hình */}
-        <div className="fixed bottom-24 right-4 z-[70] flex flex-col gap-2 shadow-2xl rounded-xl bg-slate-800/90 p-2 fade-in">
-          <button 
-            onClick={() => setView('doi-truong')} 
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${view === 'doi-truong' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'}`}
-          >
-            Trang Đội Trưởng
-          </button>
-          <button 
-            onClick={() => setView('tho')} 
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${view === 'tho' ? 'bg-yellow-500 text-white' : 'text-slate-300 hover:text-white'}`}
-          >
-            App Thợ Đi Tuyến
-          </button>
-        </div>
+        {activeTab === 'phancong' && <PhanCongDashboard session={session} />}
+        {activeTab === 'nhanviec' && <GiaoDienTho session={session} />}
+        {activeTab === 'danhsach' && <QuanLyDanhSach session={session} />}
+        {activeTab === 'thongke' && <ThongKeDashboard session={session} />}
       </div>
 
-      {/* THANH MENU: ĐƯỢC BỌC TRONG {session && ...} ĐỂ CHỈ HIỆN KHI ĐÃ ĐĂNG NHẬP */}
-      {session && view === 'doi-truong' && (
+      {/* THANH MENU ĐÁY: ĐÃ TÍCH HỢP 4 TAB CHÍNH */}
+      {session && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-x border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] rounded-t-xl fade-in">
           <div className="flex justify-around items-center h-16">
 
+            {/* TAB 1: PHÂN CÔNG */}
             <button 
               onClick={() => setActiveTab('phancong')} 
               className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'phancong' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
@@ -71,8 +48,17 @@ function App() {
               <span className="text-[10px] font-bold uppercase tracking-wide">Phân Công</span>
             </button>
             
+            {/* TAB 2 (MỚI): NHẬN VIỆC */}
             <button 
-              id="btn-tab-dieu-hanh"
+              onClick={() => setActiveTab('nhanviec')} 
+              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'nhanviec' ? 'text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <i className={`text-xl mb-1 ${activeTab === 'nhanviec' ? 'fa-solid fa-helmet-safety' : 'fa-solid fa-hard-hat'}`}></i>
+              <span className="text-[10px] font-bold uppercase tracking-wide">Nhận Việc</span>
+            </button>
+
+            {/* TAB 3: ĐIỀU HÀNH */}
+            <button 
               onClick={() => setActiveTab('danhsach')} 
               className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
             >
@@ -80,6 +66,7 @@ function App() {
               <span className="text-[10px] font-bold uppercase tracking-wide">Điều Hành</span>
             </button>
 
+            {/* TAB 4: THỐNG KÊ */}
             <button 
               onClick={() => setActiveTab('thongke')} 
               className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'thongke' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
