@@ -962,10 +962,7 @@ export default function PhanCongDashboard() {
           </div>
         )}
       </div>
-      
-      {/* SỬA LỖI: Đóng điều kiện {mainTab === 'phan_cong' && ( của Giỏ Hàng Thợ ở đây */}
-      )} 
-      
+      )}
     </div>
   );
 }
