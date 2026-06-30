@@ -46,7 +46,7 @@ export default function GiaoDienTho() {
     fetchData();
   }, [thoHienTai]);
 
-  // HÀM XỬ LÝ 4 KỊCH BẢN (ĐÃ TÍCH HỢP CẦU NỐI SANG TAB ĐIỀU HÀNH)
+  // HÀM XỬ LÝ KỊCH BẢN (ĐÃ TÍCH HỢP GÁC CỔNG TỰ ĐỘNG THU HỒI LỖI KINH DOANH)
   const handleXuLyKichBan = async (ca, kichBan, trangThaiMoi) => {
     let ghiChu = '';
     
@@ -57,6 +57,28 @@ export default function GiaoDienTho() {
 
     const toastId = toast.loading(`Đang xử lý kịch bản: ${kichBan}...`);
     try {
+      // =====================================================================
+      // BƯỚC 0: GÁC CỔNG - KIỂM TRA TRÙNG LẶP BÊN TAB ĐIỀU HÀNH
+      // =====================================================================
+      const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
+      const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
+      
+      const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
+      
+      if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
+        // TỊCH THU CA VÀ CẢNH BÁO THỢ NGAY LẬP TỨC
+        await supabase.from('danh_sach_doc_thu')
+          .update({ trang_thai_hien_tai: 'loi_dong_bo_kd' }) // Gắn nhãn lỗi để gửi về Đội trưởng
+          .eq('id', ca.id);
+          
+        toast('⚠️ Đã có lệnh bên Điều Hành. Hệ thống tự động thu hồi ca!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
+        fetchData();
+        return; // DỪNG LẠI! Không chạy tiếp các bước bên dưới
+      }
+
+      // =====================================================================
+      // NẾU CA HỢP LỆ (KHÔNG BỊ CHẶN), TIẾP TỤC CHẠY LUỒNG BÌNH THƯỜNG
+      // =====================================================================
       // 1. Cập nhật trạng thái bên luồng ĐỐC THU
       await supabase.from('danh_sach_doc_thu')
         .update({ trang_thai_hien_tai: trangThaiMoi })
@@ -72,14 +94,9 @@ export default function GiaoDienTho() {
         ghi_chu: ghiChu
       }]);
 
-      // 3. CẦU NỐI ĐỒNG BỘ NÂNG CẤP: CHỈ bắn ca Cắt điện và Xác minh sang văn phòng. Ca Hẹn lại giữ nội bộ!
+      // 3. CẦU NỐI ĐỒNG BỘ SANG BẢNG CUSTOMERS
       if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien') {
-        
         const trangThaiDich = trangThaiMoi === 'da_chuyen_xac_minh' ? 'cho_xac_minh' : 'da_cat';
-        
-        // SỬA LỖI 406: Dùng .limit(1) thay cho .single() để DB không báo lỗi
-        const { data: checkKhList } = await supabase.from('customers').select('id').eq('ma_pe', ca.ma_pe).limit(1);
-        const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
 
         const payloadCustomer = {
           ma_pe: ca.ma_pe,
@@ -92,17 +109,16 @@ export default function GiaoDienTho() {
           ghi_chu: `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
         };
 
-        // Nếu là trạng thái ĐÃ CẮT, chốt luôn Giờ Cắt
-        if (trangThaiDich === 'da_cat') {
-            payloadCustomer.ngay_cat = new Date().toISOString();
-        }
+        if (trangThaiDich === 'da_cat') payloadCustomer.ngay_cat = new Date().toISOString();
 
         let newCustomerId = null;
 
         if (checkKh) {
+          // checkKh tồn tại nhưng hợp lệ (VD: đang ở trạng thái 'binh_thuong')
           await supabase.from('customers').update(payloadCustomer).eq('id', checkKh.id);
           newCustomerId = checkKh.id;
         } else {
+          // Tạo mới
           const { data: newKh } = await supabase.from('customers').insert([payloadCustomer]).select();
           if (newKh && newKh.length > 0) newCustomerId = newKh[0].id;
         }
