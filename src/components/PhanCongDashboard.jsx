@@ -194,16 +194,16 @@ export default function PhanCongDashboard() {
   const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Dành cho Khối TỔNG QUAN (Vá lỗi đếm trùng hàng tồn)
-  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai').length;
+  // 2. Dành cho Khối TỔNG QUAN (Gộp hen_lai và da_bao_hen, thêm đếm Xác minh)
+  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
   const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
   const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
+  const demXacMinh = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; // <--- ĐÃ BỔ SUNG BIẾN NÀY
 
-  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
-  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat;
-  // Số ca đã giải quyết = Đã thu + Đã cắt + Đã báo cáo hẹn lại
-  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay; 
+  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục (Cộng thêm ca Xác Minh)
+  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh;
+  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
   const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
