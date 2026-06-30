@@ -195,22 +195,25 @@ export default function PhanCongDashboard() {
   const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Dành cho Khối TỔNG QUAN (Gộp hen_lai và da_bao_hen, thêm đếm Xác minh)
+  // 2. Dành cho Khối TỔNG QUAN (Ép buộc TẤT CẢ các thẻ đều chỉ đếm dữ liệu của HÔM NAY)
   const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
-  const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
-  const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
-  const demXacMinh = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; // <--- ĐÃ BỔ SUNG BIẾN NÀY
+  // SỬA ĐỔI: Đổi danhSach thành caHomNay
+  const demDaThu = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
+  const demDaCat = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
+  const demXacMinh = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; 
 
-  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục (Cộng thêm ca Xác Minh)
+  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
   const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh;
   const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
-  // SỬA LỖI: Khi bấm tab Khách hẹn lại, phải móc cả ca 'hen_lai' (cũ) và 'da_bao_hen' (vừa bấm) ra hiển thị
-  const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
-    ? caHomNay.filter(c => overviewTab === 'hen_lai' ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') : c.trang_thai_hien_tai === 'chua_xu_ly') 
-    : danhSach.filter(c => c.trang_thai_hien_tai === overviewTab);
+  // SỬA ĐỔI: Ép bảng chi tiết bên dưới cũng chỉ hiện ca của HÔM NAY
+  const danhSachHienThiTongQuan = caHomNay.filter(c => 
+    overviewTab === 'hen_lai' 
+      ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') 
+      : c.trang_thai_hien_tai === overviewTab
+  );
 
   // 3. Phân loại Giỏ Việc Thợ
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
