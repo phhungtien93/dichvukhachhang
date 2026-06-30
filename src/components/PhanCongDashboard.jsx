@@ -44,8 +44,9 @@ export default function PhanCongDashboard() {
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'])
-        .eq('is_active', true); // <--- THÊM MÀNG LỌC NÀY ĐỂ LOẠI BỎ SỐ LIỆU RÁC NGÀY HÔM QUA
+        // SỬA LỖI: Nhét thêm 'da_bao_hen' vào mảng để Supabase không vứt bỏ ca này
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen'])
+        .eq('is_active', true);
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
@@ -206,8 +207,9 @@ export default function PhanCongDashboard() {
   const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
+  // SỬA LỖI: Khi bấm tab Khách hẹn lại, phải móc cả ca 'hen_lai' (cũ) và 'da_bao_hen' (vừa bấm) ra hiển thị
   const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
-    ? caHomNay.filter(c => c.trang_thai_hien_tai === overviewTab) 
+    ? caHomNay.filter(c => overviewTab === 'hen_lai' ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') : c.trang_thai_hien_tai === 'chua_xu_ly') 
     : danhSach.filter(c => c.trang_thai_hien_tai === overviewTab);
 
   // 3. Phân loại Giỏ Việc Thợ
