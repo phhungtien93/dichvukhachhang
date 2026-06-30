@@ -195,7 +195,7 @@ export default function GiaoDienTho() {
                   </button>
                   
                   <button 
-                    onClick={() => handleXuLyKichBan(ca, 'HẸN LẠI', 'hen_lai')} 
+                    onClick={() => handleXuLyKichBan(ca, 'HẸN LẠI', 'da_bao_hen')} 
                     className="bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-500 hover:text-white active:scale-95 transition-all font-bold py-2.5 rounded-lg text-[11px] shadow-sm flex flex-col items-center justify-center gap-1"
                   >
                     <i className="fa-solid fa-clock-rotate-left text-sm"></i> HẸN LẠI
