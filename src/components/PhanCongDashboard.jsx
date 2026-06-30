@@ -191,7 +191,7 @@ export default function PhanCongDashboard() {
   const caTonDong = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight);
 
   // 1. Dành cho Khối TỒN ĐỌNG (Lấy từ caTonDong)
-  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai');
+  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
   const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
@@ -215,8 +215,8 @@ export default function PhanCongDashboard() {
       : c.trang_thai_hien_tai === overviewTab
   );
 
-  // 3. Phân loại Giỏ Việc Thợ
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
+  // 3. Phân loại Giỏ Việc Thợ (Đưa da_bao_hen vào list hoàn thành để mất khỏi Kho/Giỏ, giữ lại hen_lai để thợ đi thu)
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
   
   // ÉP BUỘC Giỏ Việc chỉ được chứa các ca của ngày hôm nay (caHomNay). Qua ngày mới tự động sạch bách!
@@ -238,24 +238,29 @@ export default function PhanCongDashboard() {
     gioViec[c.nguoi_phu_trach].push(c);
   });
 
-  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời cho ca tồn đọng)
+  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời & Tái sinh Hẹn Lại)
   const handleGiaoCumTru = async (danhSachCa, tenTho) => {
-    const ids = danhSachCa.map(c => c.id);
-    const isoNow = new Date().toISOString(); // Bắt mốc thời gian hiện tại
-    const toastId = toast.loading(`Giao ${ids.length} ca cho ${tenTho}...`);
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${tenTho}...`);
     
     try {
-      // Vừa đổi tên thợ, vừa Cập nhật ngày nạp dữ liệu để ca tồn đọng "tái sinh" thành ca hôm nay
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow })
-        .in('id', ids)
-        .eq('is_active', true);
-        
-      if (error) throw error;
+      // Phân tách làm 2 luồng: Ca bình thường và Ca đã báo hẹn
+      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
+      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        // ÉP CƠ SỞ DỮ LIỆU ĐỔI TRẠNG THÁI VỀ LẠI 'hen_lai'
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
       
-      // Cập nhật ngay trên giao diện để hết giật lag
-      setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow } : c));
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
       toast.success(`Xong!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi khi phân công', { id: toastId });
@@ -270,15 +275,21 @@ export default function PhanCongDashboard() {
     const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
     
     try {
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow })
-        .in('id', selectedMicroTasks)
-        .eq('is_active', true);
-        
-      if (error) throw error;
+      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
       
-      setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow } : c));
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
