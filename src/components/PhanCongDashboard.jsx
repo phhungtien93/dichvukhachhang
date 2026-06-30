@@ -24,6 +24,37 @@ export default function PhanCongDashboard() {
   const [isBacklogExpanded, setIsBacklogExpanded] = useState(false);
   const [backlogTab, setBacklogTab] = useState('hen_lai'); // 'hen_lai' hoặc 'chua_xu_ly
 
+  // === STATE CHO TAB LỊCH SỬ ===
+  const [mainTab, setMainTab] = useState('phan_cong'); // Điều khiển màn hình: 'phan_cong' hoặc 'lich_su'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [historyResults, setHistoryResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // === HÀM TÌM KIẾM LỊCH SỬ TỪ BẢNG LẠNH ===
+  const handleSearchHistory = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    setHasSearched(true);
+    try {
+      // Tìm kiếm thông minh bằng ilike: khớp Mã PE, Số điện thoại hoặc Tên KH
+      const { data, error } = await supabase
+        .from('lich_su_phan_cong')
+        .select('*')
+        .or(`ma_pe.ilike.%${searchQuery}%,so_dien_thoai.ilike.%${searchQuery}%,ten_kh.ilike.%${searchQuery}%`)
+        .order('ngay_nap_du_lieu', { ascending: false })
+        .limit(50); // Giới hạn 50 kết quả để chống lag nếu gõ từ khóa quá chung chung
+
+      if (error) throw error;
+      setHistoryResults(data || []);
+    } catch (error) {
+      toast.error('Lỗi khi tra cứu dữ liệu lịch sử!');
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const toggleGroup = (soGCS, nhom) => {
     const groupId = `${soGCS}-${nhom}`;
@@ -314,8 +345,116 @@ export default function PhanCongDashboard() {
 
       {/* KHO VIỆC 2 TẦNG (GOM THEO SỔ GCS CHUẨN) */}
       <div className="flex-1 p-3 space-y-3 overflow-y-auto">
-        {/* ================= BẮT ĐẦU CHÈN THÊM KHU VỰC TỔNG QUAN ================= */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
+        
+        {/* === THANH ĐIỀU HƯỚNG MÀN HÌNH CHÍNH === */}
+        <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex shrink-0">
+           <button 
+             onClick={() => setMainTab('phan_cong')} 
+             className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all flex justify-center items-center gap-1.5 ${mainTab === 'phan_cong' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+           >
+             <i className="fa-solid fa-list-check"></i> ĐIỀU PHỐI CA
+           </button>
+           <button 
+             onClick={() => setMainTab('lich_su')} 
+             className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all flex justify-center items-center gap-1.5 ${mainTab === 'lich_su' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+           >
+             <i className="fa-solid fa-clock-rotate-left"></i> LỊCH SỬ PHÂN CÔNG
+           </button>
+        </div>
+
+        {/* NẾU ĐANG Ở TAB LỊCH SỬ -> HIỂN THỊ GIAO DIỆN TÌM KIẾM */}
+        {mainTab === 'lich_su' && (
+          <div className="fade-in space-y-3 pb-4">
+            {/* Ô nhập từ khóa */}
+            <form onSubmit={handleSearchHistory} className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <i className="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Nhập Mã PE, SĐT hoặc Tên..."
+                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={isSearching}
+                className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs shadow-sm active:scale-95 transition-all flex items-center justify-center shrink-0"
+              >
+                {isSearching ? <i className="fa-solid fa-spinner animate-spin"></i> : 'TÌM'}
+              </button>
+            </form>
+
+            {/* Bảng hiển thị kết quả */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[300px]">
+              <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                <span className="text-[10px] font-black text-slate-600 uppercase">Kết quả tra cứu ({historyResults.length})</span>
+              </div>
+              
+              <div className="p-2 space-y-2">
+                {!hasSearched ? (
+                  <div className="text-center py-10 text-slate-400">
+                    <i className="fa-solid fa-folder-open text-4xl mb-2 opacity-50"></i>
+                    <p className="text-xs font-medium">Nhập thông tin để quét dữ liệu cũ</p>
+                  </div>
+                ) : isSearching ? (
+                  <div className="text-center py-10 text-blue-500">
+                    <i className="fa-solid fa-circle-notch animate-spin text-3xl mb-2"></i>
+                    <p className="text-xs font-bold animate-pulse">Đang rà soát kho lưu trữ...</p>
+                  </div>
+                ) : historyResults.length === 0 ? (
+                  <div className="text-center py-10 text-rose-500">
+                    <i className="fa-solid fa-ghost text-4xl mb-2 opacity-50"></i>
+                    <p className="text-xs font-bold">Không tìm thấy hồ sơ nào khớp!</p>
+                  </div>
+                ) : (
+                  historyResults.map(ca => (
+                    <div key={ca.id} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5 slide-up">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-slate-800 text-[11px]">{ca.ten_kh}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase tracking-wider ${
+                          ca.trang_thai_hien_tai === 'da_thu' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          ca.trang_thai_hien_tai === 'da_chuyen_cat_dien' ? 'bg-red-50 text-red-700 border-red-200' :
+                          ca.trang_thai_hien_tai === 'da_chuyen_xac_minh' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          ca.trang_thai_hien_tai === 'loi_dong_bo_kd' ? 'bg-slate-700 text-white border-slate-800' :
+                          'bg-orange-50 text-orange-700 border-orange-200'
+                        }`}>
+                          {ca.trang_thai_hien_tai === 'da_thu' ? 'Đã thu tiền' :
+                           ca.trang_thai_hien_tai === 'da_chuyen_cat_dien' ? 'Đã cắt điện' :
+                           ca.trang_thai_hien_tai === 'da_chuyen_xac_minh' ? 'Xác minh Bill' :
+                           ca.trang_thai_hien_tai === 'loi_dong_bo_kd' ? 'Lỗi Kinh Doanh' :
+                           'Khách hẹn lại'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex gap-2 items-center mt-0.5">
+                        <span className="font-mono font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">{ca.ma_pe}</span>
+                        <span className="font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 text-[10px]"><i className="fa-solid fa-phone mr-1"></i>{ca.so_dien_thoai || 'Trống'}</span>
+                      </div>
+
+                      <div className="flex justify-between items-end mt-1 border-t border-slate-100 pt-1.5">
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold"><i className="fa-solid fa-hard-hat mr-1"></i>Thợ xử lý: <span className="text-blue-700">{ca.nguoi_phu_trach || 'Chưa rõ'}</span></p>
+                          <p className="text-[9px] text-slate-500 font-bold mt-0.5"><i className="fa-solid fa-calendar-check mr-1"></i>Cập nhật: {new Date(ca.ngay_nap_du_lieu).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                        </div>
+                        <span className="font-mono text-slate-400 font-bold text-[9px]"><i className="fa-solid fa-location-dot mr-1"></i>{ca.ma_tru_sach}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NẾU ĐANG Ở TAB ĐIỀU PHỐI -> HIỂN THỊ LUỒNG LÀM VIỆC CHÍNH */}
+        {mainTab === 'phan_cong' && (
+          <div className="fade-in space-y-3">
+            {/* ================= BẮT ĐẦU KHU VỰC TỔNG QUAN ================= */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
           <button
             onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
             className="w-full flex justify-between items-center p-3 bg-blue-50 hover:bg-blue-100 transition-colors"
@@ -721,10 +860,13 @@ export default function PhanCongDashboard() {
             </div>
           ))
         )}
+          </div>
+        )}
       </div>
 
-      {/* GIỎ HÀNG THỢ */}
-      <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-20 transition-all duration-300 relative">
+      {/* GIỎ HÀNG THỢ (Ẩn đi nếu đang xem Lịch sử để tối ưu không gian màn hình) */}
+      {mainTab === 'phan_cong' && (
+        <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-20 transition-all duration-300 relative shrink-0">
         <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-2"></div>
         <div className="px-4 pb-2">
           <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center justify-between mb-3">
