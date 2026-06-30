@@ -394,6 +394,9 @@ export default function PhanCongDashboard() {
       toast.error('Lỗi khi xử lý!', { id: toastId });
     }
   };
+
+  // BỔ SUNG LỆNH RETURN BỊ THIẾU Ở ĐÂY
+  return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in">
       <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
         <div>
