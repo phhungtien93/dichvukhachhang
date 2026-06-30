@@ -543,6 +543,54 @@ export default function QuanLyDanhSach() {
     setLoading(false);
   };
 
+  // ======================================================================
+  // HÀM XỬ LÝ 3 KỊCH BẢN TẠI HIỆN TRƯỜNG CHO CA CHỜ CẮT ĐIỆN (CHẠY ĐỘC LẬP)
+  // ======================================================================
+  const handleXuLyHienTruong = async (ca_id, ten_kh, kichBan) => {
+    let ghiChuMoi = '';
+    let noiDungLog = '';
+    let hanhDongLog = '';
+    let payloadUpdate = { trang_thai: kichBan };
+
+    if (kichBan === 'da_cat') {
+      if (!window.confirm(`Xác nhận ĐÃ CẮT ĐIỆN nhà khách hàng ${ten_kh}?`)) return;
+      ghiChuMoi = 'Đã cắt điện tại hiện trường';
+      hanhDongLog = 'Xác nhận Cắt điện';
+      noiDungLog = `Nhân viên báo về: Khách KHÔNG ĐÓNG - ĐÃ CẮT ĐIỆN.`;
+      payloadUpdate.ngay_cat = new Date().toISOString();
+    } 
+    else if (kichBan === 'cho_xac_minh') {
+      const thongTinBill = prompt('Nhập thông tin bill khách vừa chuyển (Ngân hàng, số tiền...):');
+      if (thongTinBill === null) return;
+      ghiChuMoi = `Khách chuyển khoản tại chỗ: ${thongTinBill}`;
+      hanhDongLog = 'Báo cáo Bill (Tại chỗ)';
+      noiDungLog = `Nhân viên báo về: Khách CHUYỂN KHOẢN TẠI CHỖ. Yêu cầu VP check bill! (Nội dung: ${thongTinBill})`;
+    } 
+    else if (kichBan === 'dang_su_dung') {
+      if (!window.confirm(`Xác nhận KHÁCH ĐÃ HẾT NỢ trên hệ thống? Lệnh cắt sẽ bị hủy.`)) return;
+      ghiChuMoi = 'Khách đã thanh toán qua kênh khác, nợ = 0';
+      hanhDongLog = 'Hủy lệnh Cắt';
+      noiDungLog = `Nhân viên báo về: Khách ĐÃ THANH TOÁN TỪ TRƯỚC. Hủy lệnh cắt, khôi phục trạng thái.`;
+      // Bổ sung xóa nợ
+      payloadUpdate.so_tien_no = 0;
+      payloadUpdate.da_thanh_toan = true;
+      payloadUpdate.ngay_thanh_toan = new Date().toISOString();
+    }
+
+    payloadUpdate.ghi_chu = ghiChuMoi;
+    const toastId = toast.loading('Đang xử lý...');
+
+    try {
+      await supabase.from('customers').update(payloadUpdate).eq('id', ca_id);
+      await supabase.from('suspension_logs').insert([{ customer_id: ca_id, hanh_dong: hanhDongLog, noi_dung: noiDungLog }]);
+      toast.success('Xử lý thành công!', { id: toastId });
+      fetchCustomers(true); 
+      setViewMode('list'); // Đẩy về danh sách sau khi thao tác xong
+    } catch (error) {
+      toast.error('Lỗi khi cập nhật dữ liệu!', { id: toastId });
+    }
+  };
+
   const filteredCustomers = customers.filter(kh => {
     const matchSearch = kh.ma_pe.toLowerCase().includes(searchTerm.toLowerCase()) || kh.ten_kh.toLowerCase().includes(searchTerm.toLowerCase());
     if (activeTab === 'cho_xac_minh') return matchSearch && kh.trang_thai === 'cho_xac_minh';
@@ -962,10 +1010,39 @@ export default function QuanLyDanhSach() {
 
                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 mt-4 border-b pb-1">Mảng Nghiệp Vụ Thi Công Địa Bàn</h4>
                  {customerInfo?.trang_thai === 'cho_cat' && (
-                    <>
-                      <button onClick={() => openActionModal('ht_da_cat', 'Xác nhận đóng khóa công tơ')} className="w-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all mb-1"><i className="fa-solid fa-scissors text-base"></i> Xác nhận ĐÃ NGƯNG HƠI THỰC TẾ</button>
-                      <button onClick={() => openActionModal('ht_tro_ngai', 'Báo cáo vướng mắc không thi công được')} className="w-full bg-white text-purple-700 border border-purple-300 hover:bg-purple-50 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"><i className="fa-solid fa-ban text-base"></i> Báo cáo Trở ngại (Khóa cổng...)</button>
-                    </>
+                    <div className="flex flex-col gap-2">
+                      {/* Nút 1: Cắt điện ngưng hơi */}
+                      <button 
+                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'da_cat')} 
+                        className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-scissors text-base"></i> Cắt điện ngưng hơi
+                      </button>
+
+                      {/* Nút 2: Khách CK tại chỗ */}
+                      <button 
+                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'cho_xac_minh')} 
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-money-bill-transfer text-base"></i> Khách chuyển khoản (Có Bill)
+                      </button>
+
+                      {/* Nút 3: Đã thanh toán (Nợ = 0) */}
+                      <button 
+                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')} 
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-circle-check text-base"></i> Đã hết nợ trên hệ thống
+                      </button>
+
+                      {/* Nút 4: Báo trở ngại (Giữ nguyên của bạn) */}
+                      <button 
+                        onClick={() => openActionModal('ht_tro_ngai', 'Báo cáo vướng mắc không thi công được')} 
+                        className="w-full bg-white text-purple-700 border border-purple-300 hover:bg-purple-50 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all mt-1"
+                      >
+                        <i className="fa-solid fa-ban text-base"></i> Báo cáo Trở ngại (Khóa cổng...)
+                      </button>
+                    </div>
                  )}
                  {customerInfo?.trang_thai === 'da_cat' && (
                     <div className="space-y-2">
