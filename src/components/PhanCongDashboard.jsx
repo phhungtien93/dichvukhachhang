@@ -44,8 +44,8 @@ export default function PhanCongDashboard() {
       const { data: dsData, error: dsErr } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh'])
-        .eq('is_active', true); // <--- THÊM MÀNG LỌC NÀY ĐỂ LOẠI BỎ SỐ LIỆU RÁC NGÀY HÔM QUA
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen'])
+        .eq('is_active', true);
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
     } catch (error) {
@@ -189,32 +189,31 @@ export default function PhanCongDashboard() {
   const caHomNay = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) >= todayMidnight);
   const caTonDong = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight);
 
-  // 1. Dành cho Khối TỒN ĐỌNG (Lấy từ caTonDong)
-  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai');
+  // 1. Dành cho Khối TỒN ĐỌNG
+  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
   const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
   const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
 
-  // 2. Dành cho Khối TỔNG QUAN (Vá lỗi đếm trùng hàng tồn)
-  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai').length;
+  // 2. Dành cho Khối TỔNG QUAN (Gộp hen_lai và da_bao_hen, thêm đếm Xác minh)
+  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
   const demDaThu = danhSach.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
   const demDaCat = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
+  const demXacMinh = danhSach.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; // MỚI
 
   // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
-  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat;
-  // Số ca đã giải quyết = Đã thu + Đã cắt + Đã báo cáo hẹn lại
-  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay; 
+  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh;
+  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
   const danhSachHienThiTongQuan = (overviewTab === 'hen_lai' || overviewTab === 'chua_xu_ly') 
-    ? caHomNay.filter(c => c.trang_thai_hien_tai === overviewTab) 
+    ? caHomNay.filter(c => overviewTab === 'hen_lai' ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') : c.trang_thai_hien_tai === 'chua_xu_ly') 
     : danhSach.filter(c => c.trang_thai_hien_tai === overviewTab);
 
   // 3. Phân loại Giỏ Việc Thợ
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'hen_lai']; 
+  // Đưa da_bao_hen vào list hoàn thành để biến mất khỏi app thợ, bỏ hen_lai ra để Đội trưởng giao việc lại thì thợ còn thấy
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  
-  // ÉP BUỘC Giỏ Việc chỉ được chứa các ca của ngày hôm nay (caHomNay). Qua ngày mới tự động sạch bách!
   const caDaGiao = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
@@ -233,24 +232,28 @@ export default function PhanCongDashboard() {
     gioViec[c.nguoi_phu_trach].push(c);
   });
 
-  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời cho ca tồn đọng)
+  // 4. CHỨC NĂNG CHIA CA (Tích hợp Gia hạn vòng đời & Reset Hẹn Lại)
   const handleGiaoCumTru = async (danhSachCa, tenTho) => {
-    const ids = danhSachCa.map(c => c.id);
-    const isoNow = new Date().toISOString(); // Bắt mốc thời gian hiện tại
-    const toastId = toast.loading(`Giao ${ids.length} ca cho ${tenTho}...`);
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${tenTho}...`);
     
     try {
-      // Vừa đổi tên thợ, vừa Cập nhật ngày nạp dữ liệu để ca tồn đọng "tái sinh" thành ca hôm nay
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow })
-        .in('id', ids)
-        .eq('is_active', true);
-        
-      if (error) throw error;
+      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
+      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+      }
+      // Reset ca da_bao_hen về lại hen_lai để app thợ đọc được
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
       
-      // Cập nhật ngay trên giao diện để hết giật lag
-      setDanhSach(prev => prev.map(c => ids.includes(c.id) ? { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow } : c));
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
       toast.success(`Xong!`, { id: toastId });
     } catch (error) {
       toast.error('Lỗi khi phân công', { id: toastId });
@@ -265,15 +268,21 @@ export default function PhanCongDashboard() {
     const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
     
     try {
-      const { error } = await supabase
-        .from('danh_sach_doc_thu')
-        .update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow })
-        .in('id', selectedMicroTasks)
-        .eq('is_active', true);
-        
-      if (error) throw error;
+      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
       
-      setDanhSach(prev => prev.map(c => selectedMicroTasks.includes(c.id) ? { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow } : c));
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
@@ -330,15 +339,11 @@ export default function PhanCongDashboard() {
               </div>
 
               {/* === LƯỚI 4 Ô CHỈ SỐ GÓP (TÍCH HỢP TỶ LỆ) === */}
+              {/* === LƯỚI LỆCH 5 Ô (TÍCH HỢP TỶ LỆ) === */}
               <div className="grid grid-cols-2 gap-2.5">
                 
                 {/* THẺ 1: KHÁCH HẸN LẠI (CAM) */}
-                <div 
-                  onClick={() => setOverviewTab('hen_lai')}
-                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'hen_lai' ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' : 'bg-orange-50 border-orange-200 opacity-60 hover:opacity-100'
-                  }`}
-                >
+                <div onClick={() => setOverviewTab('hen_lai')} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'hen_lai' ? 'bg-orange-100/70 border-orange-400 ring-2 ring-orange-400 shadow-md scale-[1.02]' : 'bg-orange-50 border-orange-200 opacity-60 hover:opacity-100'}`}>
                   <div className="absolute -right-2 -top-2 text-orange-200/50 text-4xl"><i className="fa-solid fa-clock-rotate-left"></i></div>
                   <div className="relative z-10">
                     <div className="font-black text-2xl text-orange-700 mb-0.5 flex items-baseline gap-1">
@@ -350,12 +355,7 @@ export default function PhanCongDashboard() {
                 </div>
 
                 {/* THẺ 2: ĐÃ THU TIỀN (XANH NGỌC) */}
-                <div 
-                  onClick={() => setOverviewTab('da_thu')}
-                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'da_thu' ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' : 'bg-emerald-50 border-emerald-200 opacity-60 hover:opacity-100'
-                  }`}
-                >
+                <div onClick={() => setOverviewTab('da_thu')} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'da_thu' ? 'bg-emerald-100/70 border-emerald-400 ring-2 ring-emerald-400 shadow-md scale-[1.02]' : 'bg-emerald-50 border-emerald-200 opacity-60 hover:opacity-100'}`}>
                   <div className="absolute -right-2 -top-2 text-emerald-200/50 text-4xl"><i className="fa-solid fa-money-bill-wave"></i></div>
                   <div className="relative z-10">
                     <div className="font-black text-2xl text-emerald-700 mb-0.5 flex items-baseline gap-1">
@@ -367,12 +367,7 @@ export default function PhanCongDashboard() {
                 </div>
 
                 {/* THẺ 3: ĐÃ CẮT ĐIỆN (ĐỎ) */}
-                <div 
-                  onClick={() => setOverviewTab('da_chuyen_cat_dien')}
-                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-100/70 border-red-400 ring-2 ring-red-400 shadow-md scale-[1.02]' : 'bg-red-50 border-red-200 opacity-60 hover:opacity-100'
-                  }`}
-                >
+                <div onClick={() => setOverviewTab('da_chuyen_cat_dien')} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-100/70 border-red-400 ring-2 ring-red-400 shadow-md scale-[1.02]' : 'bg-red-50 border-red-200 opacity-60 hover:opacity-100'}`}>
                   <div className="absolute -right-2 -top-2 text-red-200/50 text-4xl"><i className="fa-solid fa-scissors"></i></div>
                   <div className="relative z-10">
                     <div className="font-black text-2xl text-red-700 mb-0.5 flex items-baseline gap-1">
@@ -383,21 +378,106 @@ export default function PhanCongDashboard() {
                   </div>
                 </div>
 
-                {/* THẺ 4: CHƯA THỰC HIỆN (XANH DƯƠNG) */}
-                <div 
-                  onClick={() => setOverviewTab('chua_xu_ly')}
-                  className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${
-                    overviewTab === 'chua_xu_ly' ? 'bg-blue-100/70 border-blue-400 ring-2 ring-blue-400 shadow-md scale-[1.02]' : 'bg-blue-50 border-blue-200 opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  <div className="absolute -right-2 -top-2 text-blue-200/50 text-4xl"><i className="fa-solid fa-file-circle-question"></i></div>
+                {/* THẺ 4: XÁC MINH (VÀNG) */}
+                <div onClick={() => setOverviewTab('da_chuyen_xac_minh')} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'da_chuyen_xac_minh' ? 'bg-amber-100/70 border-amber-400 ring-2 ring-amber-400 shadow-md scale-[1.02]' : 'bg-amber-50 border-amber-200 opacity-60 hover:opacity-100'}`}>
+                  <div className="absolute -right-2 -top-2 text-amber-200/50 text-4xl"><i className="fa-solid fa-receipt"></i></div>
                   <div className="relative z-10">
-                    <div className="font-black text-2xl text-blue-700 mb-0.5 flex items-baseline gap-1">
-                      {demChuaXuHomNay} <span className="text-[10px] font-bold text-blue-400">/{tongSoCa}</span>
+                    <div className="font-black text-2xl text-amber-700 mb-0.5 flex items-baseline gap-1">
+                      {demXacMinh} <span className="text-[10px] font-bold text-amber-400">/{tongSoCa}</span>
                     </div>
-                    <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
-                    <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thực thi</p>
+                    <p className="text-[10px] font-black text-amber-800 uppercase tracking-wide">Xác minh Bill</p>
+                    <p className="text-[9px] text-amber-600 mt-0.5 font-bold">Chờ VP check</p>
                   </div>
+                </div>
+              </div>
+
+              {/* THẺ 5: CHƯA THỰC HIỆN (XANH DƯƠNG) */}
+              <div onClick={() => setOverviewTab('chua_xu_ly')} className={`mt-2.5 border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'chua_xu_ly' ? 'bg-blue-100/70 border-blue-400 ring-2 ring-blue-400 shadow-md scale-[1.02]' : 'bg-blue-50 border-blue-200 opacity-60 hover:opacity-100'}`}>
+                <div className="absolute -right-2 -top-2 text-blue-200/50 text-4xl"><i className="fa-solid fa-file-circle-question"></i></div>
+                <div className="relative z-10">
+                  <div className="font-black text-2xl text-blue-700 mb-0.5 flex items-baseline gap-1">
+                    {demChuaXuHomNay} <span className="text-[10px] font-bold text-blue-400">/{tongSoCa}</span>
+                  </div>
+                  <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
+                  <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thợ thực thi</p>
+                </div>
+              </div>
+
+              {/* BẢNG HIỂN THỊ CHI TIẾT DANH SÁCH */}
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+                  <i className={`fa-solid ${
+                    overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 
+                    overviewTab === 'da_thu' ? 'fa-money-bill-wave text-emerald-500' :
+                    overviewTab === 'da_chuyen_cat_dien' ? 'fa-scissors text-red-500' :
+                    overviewTab === 'da_chuyen_xac_minh' ? 'fa-receipt text-amber-500' :
+                    'fa-file-circle-question text-blue-500'
+                  }`}></i> 
+                  Chi tiết: {
+                    overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 
+                    overviewTab === 'da_thu' ? 'Danh sách ca thợ đã thu xong' :
+                    overviewTab === 'da_chuyen_cat_dien' ? 'Danh sách khách hàng đã cắt điện' :
+                    overviewTab === 'da_chuyen_xac_minh' ? 'Danh sách cần xác minh giao dịch' :
+                    'Danh sách hồ sơ chưa thực hiện'
+                  }
+                </p>
+                
+                <div className="space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
+                  {danhSachHienThiTongQuan.length === 0 ? (
+                    <p className="text-center text-slate-400 text-[10px] italic py-3 bg-white rounded-lg border border-slate-100">Hiện tại chưa có dữ liệu...</p>
+                  ) : (
+                    danhSachHienThiTongQuan.map(c => (
+                      <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1.5 text-[10px] slide-up ${
+                        overviewTab === 'hen_lai' ? 'border-orange-100' : 
+                        overviewTab === 'da_thu' ? 'border-emerald-100' :
+                        overviewTab === 'da_chuyen_cat_dien' ? 'border-red-100' :
+                        overviewTab === 'da_chuyen_xac_minh' ? 'border-amber-100' :
+                        'border-blue-100'
+                      }`}>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-slate-800 text-[11px] truncate max-w-[170px]">{c.ten_kh}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${
+                            overviewTab === 'hen_lai' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
+                            overviewTab === 'da_thu' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            overviewTab === 'da_chuyen_cat_dien' ? 'bg-red-50 text-red-700 border-red-200' :
+                            overviewTab === 'da_chuyen_xac_minh' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            THỢ: {c.nguoi_phu_trach || 'CHƯA GIAO'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-slate-500">
+                          <div className="flex gap-1.5 items-center">
+                            <button 
+                              onClick={() => { 
+                                navigator.clipboard.writeText(c.ma_pe); 
+                                toast.success(`Đã copy mã PE: ${c.ma_pe}`); 
+                              }}
+                              className="font-mono font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-blue-100 flex items-center"
+                            >
+                              <i className="fa-regular fa-copy mr-1 text-[9px]"></i>{c.ma_pe}
+                            </button>
+                            
+                            {c.so_dien_thoai ? (
+                              <a href={`tel:${c.so_dien_thoai}`} className="font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-1.5 py-0.5 rounded transition-all border border-emerald-100 flex items-center">
+                                <i className="fa-solid fa-phone mr-1 text-[9px]"></i>{c.so_dien_thoai}
+                              </a>
+                            ) : (
+                              <span className="font-medium text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center">
+                                <i className="fa-solid fa-phone-slash mr-1 text-[9px]"></i>Không SĐT
+                              </span>
+                            )}
+                          </div>
+                          
+                          <span className="font-mono text-slate-400 font-bold truncate max-w-[100px]" title={c.ma_tru_sach}>
+                            <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach || 'Cụm lẻ'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
