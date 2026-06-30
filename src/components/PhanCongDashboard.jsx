@@ -3,11 +3,12 @@ import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
-const DANH_SACH_THO = ['Anh A', 'Anh B', 'Anh C', 'Anh D'];
-
 export default function PhanCongDashboard() {
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
+  
+  // BIẾN MỚI: DANH SÁCH THỢ ĐỘNG LẤY TỪ DATABASE
+  const [danhSachTho, setDanhSachTho] = useState([]);
   
   const [danhMucTram, setDanhMucTram] = useState([]);
   const [danhMucTienTo, setDanhMucTienTo] = useState([]); 
@@ -65,6 +66,10 @@ export default function PhanCongDashboard() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      // Tải danh sách nhân viên thực tế (Chỉ lấy Role là user/thợ)
+      const { data: userData } = await supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
+      setDanhSachTho(userData || []);
+
       const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
       setDanhMucTram(tramData || []);
 
@@ -260,33 +265,33 @@ export default function PhanCongDashboard() {
   });
 
   const gioViec = {};
-  DANH_SACH_THO.forEach(tho => gioViec[tho] = []);
+  // Nhóm giỏ việc theo UUID của thợ thay vì tên
+  danhSachTho.forEach(tho => gioViec[tho.id] = []);
   caDaGiao.forEach(c => {
-    if (!gioViec[c.nguoi_phu_trach]) gioViec[c.nguoi_phu_trach] = [];
-    gioViec[c.nguoi_phu_trach].push(c);
+    const key = c.tho_id || c.nguoi_phu_trach; // Tương thích ngược với ca cũ chưa có UUID
+    if (!gioViec[key]) gioViec[key] = [];
+    gioViec[key].push(c);
   });
 
-  // 4. CHỨC NĂNG CHIA CA (Đã tích hợp cơ chế Gia hạn vòng đời & Tái sinh Hẹn Lại)
-  const handleGiaoCumTru = async (danhSachCa, tenTho) => {
+  // 4. CHỨC NĂNG CHIA CA (Nhận truyền vào là Object Thợ thay vì tên)
+  const handleGiaoCumTru = async (danhSachCa, thoObj) => {
     const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${tenTho}...`);
+    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${thoObj.ho_ten}...`);
     
     try {
-      // Phân tách làm 2 luồng: Ca bình thường và Ca đã báo hẹn
       const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
       const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
 
       if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
       }
       if (caBaoHenIds.length > 0) {
-        // ÉP CƠ SỞ DỮ LIỆU ĐỔI TRẠNG THÁI VỀ LẠI 'hen_lai'
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
       
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenTho, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
         return c;
       }));
       toast.success(`Xong!`, { id: toastId });
@@ -297,16 +302,41 @@ export default function PhanCongDashboard() {
 
   const toggleMicroTask = (id) => setSelectedMicroTasks(prev => prev.includes(id) ? prev.filter(tId => tId !== id) : [...prev, id]);
 
-  const handleChuyenGiaoCaLe = async (tenThoNhan) => {
-	
-	// 5. ĐẶC QUYỀN ĐỘI TRƯỞNG: TRỰC TIẾP XỬ LÝ CA TỒN ĐỌNG (HẸN LẠI)
+  const handleChuyenGiaoCaLe = async (thoNhanObj) => {
+    if (selectedMicroTasks.length === 0) return;
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Chuyển ca sang ${thoNhanObj.ho_ten}...`);
+    
+    try {
+      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
+      
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
+      setSelectedMicroTasks([]);
+      toast.success(`Thành công!`, { id: toastId });
+    } catch (error) {
+      toast.error('Lỗi điều chuyển', { id: toastId });
+    }
+  };
+
+  // 5. ĐẶC QUYỀN ĐỘI TRƯỞNG (ĐÃ TÁCH RA THÀNH HÀM ĐỘC LẬP CHUẨN CÚ PHÁP)
   const handleDoiTruongXuLyTonDong = async (ca, hanhDong) => {
     const tenHanhDong = hanhDong === 'da_thu' ? 'ĐÃ THU' : 'CẮT ĐIỆN';
     if (!window.confirm(`Xác nhận chốt ca này thành: ${tenHanhDong}?`)) return;
 
     const toastId = toast.loading(`Đội trưởng đang xử lý: ${tenHanhDong}...`);
     try {
-      // NẾU LÀ CẮT ĐIỆN -> PHẢI CHẠY BỘ LỌC GÁC CỔNG VÀ ĐỒNG BỘ SANG ĐIỀU HÀNH
       if (hanhDong === 'da_chuyen_cat_dien') {
         const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
         const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
@@ -314,14 +344,12 @@ export default function PhanCongDashboard() {
         const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
         
         if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
-          // Bị trùng -> Tịch thu vào Lỗi Kinh Doanh
           await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: 'ĐỘI TRƯỞNG' }).eq('id', ca.id);
           toast('⚠️ Khách đã có lệnh bên Điều Hành. Chuyển sang Lỗi KD!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
           fetchAllData();
           return;
         }
 
-        // Hợp lệ -> Bắn lệnh sang Điều hành
         const payloadCustomer = {
           ma_pe: ca.ma_pe,
           ten_kh: ca.ten_kh,
@@ -352,12 +380,11 @@ export default function PhanCongDashboard() {
         }
       }
 
-      // SAU KHI ĐỒNG BỘ XONG (HOẶC NẾU LÀ ĐÃ THU) -> CẬP NHẬT CA VÀ ĐÓNG DẤU ĐỘI TRƯỞNG
       await supabase.from('danh_sach_doc_thu')
         .update({ 
           trang_thai_hien_tai: hanhDong, 
-          nguoi_phu_trach: 'ĐỘI TRƯỞNG', // Ghi dấu ấn để biết ai đã chốt ca này
-          ngay_nap_du_lieu: new Date().toISOString() // Kéo ca này về ngày hôm nay để đưa lên Tổng Quan
+          nguoi_phu_trach: 'ĐỘI TRƯỞNG', 
+          ngay_nap_du_lieu: new Date().toISOString() 
         })
         .eq('id', ca.id);
 
@@ -367,35 +394,6 @@ export default function PhanCongDashboard() {
       toast.error('Lỗi khi xử lý!', { id: toastId });
     }
   };
-	
-    if (selectedMicroTasks.length === 0) return;
-    const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
-    
-    try {
-      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
-      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
-
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
-      }
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
-      
-      setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: tenThoNhan, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
-      }));
-      setSelectedMicroTasks([]);
-      toast.success(`Thành công!`, { id: toastId });
-    } catch (error) {
-      toast.error('Lỗi điều chuyển', { id: toastId });
-    }
-  };
-
-  return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in">
       <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
         <div>
@@ -810,13 +808,13 @@ export default function PhanCongDashboard() {
 
                         {/* Nút Giao việc cho thợ (Hiện ở cả 2 tab) */}
                         <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">Giao thợ:</span>
-                        {DANH_SACH_THO.map(tho => (
+                        {danhSachTho.map(tho => (
                           <button
-                            key={tho}
+                            key={tho.id}
                             onClick={() => handleGiaoCumTru([c], tho)}
                             className="bg-white hover:bg-blue-50 border border-slate-200 text-slate-600 hover:text-blue-700 px-2 py-1.5 rounded text-[9px] font-bold shrink-0 transition-colors"
                           >
-                            {tho}
+                            {tho.ho_ten}
                           </button>
                         ))}
                       </div>
@@ -934,13 +932,13 @@ export default function PhanCongDashboard() {
                       {/* CÁC NÚT ĐẨY VÀO GIỎ */}
                       <div className={`flex flex-wrap gap-1.5 border-t pt-2 mt-1 ${isTram ? 'border-amber-100' : 'border-blue-100'}`}>
                         <span className="text-[9px] text-slate-400 w-full font-bold uppercase mb-0.5">Đẩy nhanh vào giỏ:</span>
-                        {DANH_SACH_THO.map(tho => (
+                        {danhSachTho.map(tho => (
                           <button 
-                            key={tho} 
+                            key={tho.id} 
                             onClick={() => handleGiaoCumTru(danhSachCa, tho)}
                             className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 flex-1 justify-center"
                           >
-                            {tho} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho]?.length || 0}</span>
+                            {tho.ho_ten} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho.id]?.length || 0}</span>
                           </button>
                         ))}
                       </div>
@@ -966,17 +964,17 @@ export default function PhanCongDashboard() {
           </h3>
           
           <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto no-scrollbar pb-4">
-            {DANH_SACH_THO.map(tho => {
-              const soCa = gioViec[tho]?.length || 0;
-              const isActive = activeWorkerCart === tho;
+            {danhSachTho.map(tho => {
+              const soCa = gioViec[tho.id]?.length || 0;
+              const isActive = activeWorkerCart === tho.id;
               return (
                 <div 
-                  key={tho} 
-                  onClick={() => setActiveWorkerCart(isActive ? null : tho)}
+                  key={tho.id} 
+                  onClick={() => setActiveWorkerCart(isActive ? null : tho.id)}
                   className={`p-3 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-blue-600 border-blue-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-blue-50 border-blue-200 hover:border-blue-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
                 >
                   <div className="flex justify-between items-start">
-                    <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{tho}</span>
+                    <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{tho.ho_ten}</span>
                     <i className={`fa-solid fa-basket-shopping ${isActive ? 'text-blue-300' : soCa > 0 ? 'text-blue-400' : 'text-slate-300'}`}></i>
                   </div>
                   <div className={`mt-2 font-mono font-black text-xl ${isActive ? 'text-white' : soCa > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
@@ -988,14 +986,14 @@ export default function PhanCongDashboard() {
           </div>
         </div>
 
-        {/* POPUP ĐIỀU CHUYỂN CA LẺ */}
         {activeWorkerCart && (
           <div className="absolute bottom-[100%] left-0 w-full bg-slate-100 border-t border-slate-300 shadow-2xl h-[50vh] flex flex-col z-30 slide-up rounded-t-xl">
             <div className="bg-blue-700 p-3 flex justify-between items-center text-white rounded-t-xl shrink-0">
-              <h4 className="font-bold text-sm uppercase">Giỏ của {activeWorkerCart} ({gioViec[activeWorkerCart]?.length} ca)</h4>
+              <h4 className="font-bold text-sm uppercase">Giỏ của {danhSachTho.find(t => t.id === activeWorkerCart)?.ho_ten} ({gioViec[activeWorkerCart]?.length} ca)</h4>
               <button onClick={() => { setActiveWorkerCart(null); setSelectedMicroTasks([]); }} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
+            {/* ... [GIỮ NGUYÊN KHÚC RENDER MICRO TASKS Ở GIỮA] ... */}
             <div className="p-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold text-center border-b border-yellow-200">
               <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca lẻ để điều chuyển
             </div>
@@ -1038,13 +1036,13 @@ export default function PhanCongDashboard() {
                   Chuyển {selectedMicroTasks.length} ca sang:
                 </div>
                 <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
-                  {DANH_SACH_THO.filter(t => t !== activeWorkerCart).map(thoNhan => (
+                  {danhSachTho.filter(t => t.id !== activeWorkerCart).map(thoNhan => (
                     <button 
-                      key={thoNhan}
+                      key={thoNhan.id}
                       onClick={() => handleChuyenGiaoCaLe(thoNhan)}
                       className="shrink-0 bg-blue-100 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 px-4 py-2 rounded-lg font-bold text-xs transition-colors flex items-center gap-1"
                     >
-                      {thoNhan}
+                      {thoNhan.ho_ten}
                     </button>
                   ))}
                 </div>
