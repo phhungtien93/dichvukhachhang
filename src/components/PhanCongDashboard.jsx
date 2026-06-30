@@ -45,7 +45,7 @@ export default function PhanCongDashboard() {
         .from('danh_sach_doc_thu')
         .select('*')
         // SỬA LỖI: Nhét thêm 'da_bao_hen' vào mảng để Supabase không vứt bỏ ca này
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen'])
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
         .eq('is_active', true);
       if (dsErr) throw dsErr;
       setDanhSach(dsData || []);
@@ -198,28 +198,25 @@ export default function PhanCongDashboard() {
   // 2. Dành cho Khối TỔNG QUAN (Ép buộc TẤT CẢ các thẻ đều chỉ đếm dữ liệu của HÔM NAY)
   const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
   const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
-  // SỬA ĐỔI: Đổi danhSach thành caHomNay
   const demDaThu = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
   const demDaCat = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
   const demXacMinh = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; 
+  const demLoiKinhDoanh = caHomNay.filter(c => c.trang_thai_hien_tai === 'loi_dong_bo_kd').length; // CHỈ SỐ MỚI
 
-  // Thuật toán tính Tổng ca và Tiến Độ Toàn Cục
-  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh;
-  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh; 
+  // Thuật toán tính Tổng ca và Tiến Độ (Gom cả Lỗi KD vào để tổng ca không bị hụt mất)
+  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh + demLoiKinhDoanh;
+  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh + demLoiKinhDoanh; 
   const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
 
-  // SỬA ĐỔI: Ép bảng chi tiết bên dưới cũng chỉ hiện ca của HÔM NAY
   const danhSachHienThiTongQuan = caHomNay.filter(c => 
     overviewTab === 'hen_lai' 
       ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') 
       : c.trang_thai_hien_tai === overviewTab
   );
 
-  // 3. Phân loại Giỏ Việc Thợ (Đưa da_bao_hen vào list hoàn thành để mất khỏi Kho/Giỏ, giữ lại hen_lai để thợ đi thu)
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen']; 
+  // 3. Phân loại Giỏ Việc Thợ (Đẩy 'loi_dong_bo_kd' vào list hoàn thành để biến mất khỏi app Thợ)
+  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  
-  // ÉP BUỘC Giỏ Việc chỉ được chứa các ca của ngày hôm nay (caHomNay). Qua ngày mới tự động sạch bách!
   const caDaGiao = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
@@ -408,11 +405,26 @@ export default function PhanCongDashboard() {
                   <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thợ thực thi</p>
                 </div>
               </div>
+			  
+			  {/* THẺ 6: LỖI KINH DOANH - CHỈ HIỆN KHI CÓ CA BỊ TỊCH THU TỪ THỢ */}
+              {demLoiKinhDoanh > 0 && (
+                <div onClick={() => setOverviewTab('loi_dong_bo_kd')} className={`mt-2.5 border rounded-xl p-3 shadow-sm relative overflow-hidden cursor-pointer transition-all active:scale-95 select-none ${overviewTab === 'loi_dong_bo_kd' ? 'bg-slate-800 border-slate-900 ring-2 ring-slate-900 shadow-xl scale-[1.02]' : 'bg-slate-700 border-slate-600 hover:bg-slate-600 opacity-95'}`}>
+                  <div className="absolute -right-2 -top-2 text-slate-500/30 text-5xl"><i className="fa-solid fa-bug"></i></div>
+                  <div className="relative z-10">
+                    <div className="font-black text-2xl text-white mb-0.5 flex items-baseline gap-1">
+                      {demLoiKinhDoanh} <span className="text-[10px] font-bold text-slate-400">/{tongSoCa}</span>
+                    </div>
+                    <p className="text-[10px] font-black text-red-400 uppercase tracking-wide">Sai lệch KD (Đã tịch thu)</p>
+                    <p className="text-[9px] text-slate-300 mt-0.5 font-bold">KH đã mất điện từ trước!</p>
+                  </div>
+                </div>
+              )}
 
               {/* === BẢNG HIỂN THỊ CHI TIẾT (ĐÃ GỘP LÀM 1 DUY NHẤT) === */}
               <div className="mt-3 border-t border-slate-200 pt-3">
                 <p className="text-[10px] font-black text-slate-500 uppercase mb-2 flex items-center gap-1.5">
                   <i className={`fa-solid ${
+                    overviewTab === 'loi_dong_bo_kd' ? 'fa-bug text-red-500' :
                     overviewTab === 'hen_lai' ? 'fa-clock-rotate-left text-orange-500' : 
                     overviewTab === 'da_thu' ? 'fa-money-bill-wave text-emerald-500' :
                     overviewTab === 'da_chuyen_cat_dien' ? 'fa-scissors text-red-500' :
@@ -420,6 +432,7 @@ export default function PhanCongDashboard() {
                     'fa-file-circle-question text-blue-500'
                   }`}></i> 
                   Chi tiết: {
+                    overviewTab === 'loi_dong_bo_kd' ? 'Hồ sơ đã tự động tịch thu (Lỗi KD)' :
                     overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 
                     overviewTab === 'da_thu' ? 'Danh sách ca thợ đã thu xong' :
                     overviewTab === 'da_chuyen_cat_dien' ? 'Danh sách khách hàng đã cắt điện' :
