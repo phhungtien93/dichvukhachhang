@@ -21,10 +21,12 @@ export default function GiaoDienTho() {
       const { data, error } = await supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        .eq('nguoi_phu_trach', thoHienTai)
-        .eq('is_active', true) // Bắt buộc phải là ca còn mở phiên
-        .gte('ngay_nap_du_lieu', todayMidnight.toISOString()) // CỐT LÕI: Chỉ tải ca có mốc thời gian >= 00:00 hôm nay
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai']);
+        .eq('is_active', true)
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai'])
+        // Điều kiện: Phải có tên thợ này VÀ ca phải thuộc về ngày hôm nay
+        // Đội trưởng chưa giao thì thợ KHÔNG BAO GIỜ thấy ca đó
+        .eq('nguoi_phu_trach', thoHienTai) 
+        .gte('ngay_nap_du_lieu', todayMidnight.toISOString());
       
       if (error) throw error;
       
@@ -70,12 +72,12 @@ export default function GiaoDienTho() {
         ghi_chu: ghiChu
       }]);
 
-      // 3. CẦU NỐI ĐỒNG BỘ NÂNG CẤP: Bắn cả ca Cắt điện, Xác minh và Hẹn lại sang văn phòng
-      if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien' || trangThaiMoi === 'hen_lai') {
+      // 3. CẦU NỐI ĐỒNG BỘ NÂNG CẤP: CHỈ bắn ca Cắt điện và Xác minh sang văn phòng. Ca Hẹn lại giữ nội bộ!
+      if (trangThaiMoi === 'da_chuyen_xac_minh' || trangThaiMoi === 'da_chuyen_cat_dien') {
         
-        const trangThaiDich = (trangThaiMoi === 'hen_lai' || trangThaiMoi === 'da_chuyen_xac_minh') ? 'cho_xac_minh' : 'da_cat';
+        const trangThaiDich = trangThaiMoi === 'da_chuyen_xac_minh' ? 'cho_xac_minh' : 'da_cat';
         
-        // SỬA LỖI 406: Dùng .limit(1) thay cho .single() để ép DB trả về mượt mà dù tìm thấy 0 hay n dòng
+        // SỬA LỖI 406: Dùng .limit(1) thay cho .single() để DB không báo lỗi
         const { data: checkKhList } = await supabase.from('customers').select('id').eq('ma_pe', ca.ma_pe).limit(1);
         const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
 
@@ -87,11 +89,13 @@ export default function GiaoDienTho() {
           so_tien_no: ca.so_tien || 0,
           ly_do_ngung: 'no_cuoc',
           trang_thai: trangThaiDich,
-          // Nếu là ca hẹn thì tạo tiêu đề ghi chú màu cam đặc trưng cho văn phòng nhận diện
-          ghi_chu: trangThaiMoi === 'hen_lai' 
-            ? `🕒 [KHÁCH HẸN ĐÓNG] Ghi nhận từ hiện trường bởi thợ ${thoHienTai}: ${ghiChu}` 
-            : `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
+          ghi_chu: `(Chuyển tự động từ Đốc Thu bởi ${thoHienTai})`
         };
+
+        // Nếu là trạng thái ĐÃ CẮT, chốt luôn Giờ Cắt
+        if (trangThaiDich === 'da_cat') {
+            payloadCustomer.ngay_cat = new Date().toISOString();
+        }
 
         let newCustomerId = null;
 
@@ -106,10 +110,8 @@ export default function GiaoDienTho() {
         if (newCustomerId) {
           await supabase.from('suspension_logs').insert([{
             customer_id: newCustomerId,
-            hanh_dong: trangThaiMoi === 'hen_lai' ? 'Báo cáo khách hẹn' : 'Chuyển lệnh tự động',
-            noi_dung: trangThaiMoi === 'hen_lai' 
-              ? `Thợ ${thoHienTai} báo cáo: Khách hẹn đóng tiền điện cước kỳ này. Chi tiết hẹn: ${ghiChu}`
-              : `Đội Đốc Thu (${thoHienTai}) báo về: Khách ${kichBan}. Yêu cầu văn phòng theo dõi xử lý tiếp!`
+            hanh_dong: 'Chuyển lệnh tự động',
+            noi_dung: `Đội Đốc Thu (${thoHienTai}) báo về: Khách ${kichBan}. Yêu cầu văn phòng theo dõi xử lý tiếp!`
           }]);
         }
       }
