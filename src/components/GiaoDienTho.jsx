@@ -58,28 +58,30 @@ export default function GiaoDienTho() {
     const toastId = toast.loading(`Đang xử lý kịch bản: ${kichBan}...`);
     try {
       // =====================================================================
-      // BƯỚC 0: GÁC CỔNG - KIỂM TRA TRÙNG LẶP BÊN TAB ĐIỀU HÀNH
+      // BƯỚC 0: GÁC CỔNG - CHỈ CHẶN KHI CỐ TÌNH CẮT ĐIỆN / XÁC MINH / HẸN LẠI BỊ TRÙNG
+      // SỬA LỖI LOGIC: TRƯỜNG HỢP "ĐÃ THU" (KHÁCH TRẢ TIỀN) -> ĐƯỢC ĐẶC CÁCH QUA CỬA!
       // =====================================================================
-      const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
-      const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
-      
-      const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
-      
-      if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
-        // TỊCH THU CA VÀ CẢNH BÁO THỢ NGAY LẬP TỨC
-        await supabase.from('danh_sach_doc_thu')
-          .update({ trang_thai_hien_tai: 'loi_dong_bo_kd' }) // Gắn nhãn lỗi để gửi về Đội trưởng
-          .eq('id', ca.id);
-          
-        toast('⚠️ Đã có lệnh bên Điều Hành. Hệ thống tự động thu hồi ca!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
-        fetchData();
-        return; // DỪNG LẠI! Không chạy tiếp các bước bên dưới
+      if (trangThaiMoi !== 'da_thu') {
+        const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
+        const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
+        
+        const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
+        
+        if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
+          // TỊCH THU CA VÀ CẢNH BÁO THỢ NGAY LẬP TỨC
+          await supabase.from('danh_sach_doc_thu')
+            .update({ trang_thai_hien_tai: 'loi_dong_bo_kd' }) // Gắn nhãn lỗi để gửi về Đội trưởng
+            .eq('id', ca.id);
+            
+          toast('⚠️ Đã có lệnh bên Điều Hành. Hệ thống tự động thu hồi ca!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
+          fetchData();
+          return; // DỪNG LẠI! Không chạy tiếp các bước bên dưới
+        }
       }
 
       // =====================================================================
-      // NẾU CA HỢP LỆ (KHÔNG BỊ CHẶN), TIẾP TỤC CHẠY LUỒNG BÌNH THƯỜNG
+      // BƯỚC 1: CA HỢP LỆ HOẶC LÀ CA "ĐÃ THU" -> TIẾP TỤC CẬP NHẬT
       // =====================================================================
-      // 1. Cập nhật trạng thái bên luồng ĐỐC THU
       await supabase.from('danh_sach_doc_thu')
         .update({ trang_thai_hien_tai: trangThaiMoi })
         .eq('id', ca.id);
