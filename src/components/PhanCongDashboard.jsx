@@ -298,6 +298,76 @@ export default function PhanCongDashboard() {
   const toggleMicroTask = (id) => setSelectedMicroTasks(prev => prev.includes(id) ? prev.filter(tId => tId !== id) : [...prev, id]);
 
   const handleChuyenGiaoCaLe = async (tenThoNhan) => {
+	
+	// 5. ĐẶC QUYỀN ĐỘI TRƯỞNG: TRỰC TIẾP XỬ LÝ CA TỒN ĐỌNG (HẸN LẠI)
+  const handleDoiTruongXuLyTonDong = async (ca, hanhDong) => {
+    const tenHanhDong = hanhDong === 'da_thu' ? 'ĐÃ THU' : 'CẮT ĐIỆN';
+    if (!window.confirm(`Xác nhận chốt ca này thành: ${tenHanhDong}?`)) return;
+
+    const toastId = toast.loading(`Đội trưởng đang xử lý: ${tenHanhDong}...`);
+    try {
+      // NẾU LÀ CẮT ĐIỆN -> PHẢI CHẠY BỘ LỌC GÁC CỔNG VÀ ĐỒNG BỘ SANG ĐIỀU HÀNH
+      if (hanhDong === 'da_chuyen_cat_dien') {
+        const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
+        const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
+        
+        const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
+        
+        if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
+          // Bị trùng -> Tịch thu vào Lỗi Kinh Doanh
+          await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: 'ĐỘI TRƯỞNG' }).eq('id', ca.id);
+          toast('⚠️ Khách đã có lệnh bên Điều Hành. Chuyển sang Lỗi KD!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
+          fetchAllData();
+          return;
+        }
+
+        // Hợp lệ -> Bắn lệnh sang Điều hành
+        const payloadCustomer = {
+          ma_pe: ca.ma_pe,
+          ten_kh: ca.ten_kh,
+          dia_chi: ca.dia_chi,
+          so_dien_thoai: ca.so_dien_thoai || '',
+          so_tien_no: ca.so_tien || 0,
+          ly_do_ngung: 'no_cuoc',
+          trang_thai: 'da_cat', 
+          ngay_cat: new Date().toISOString(),
+          ghi_chu: `(Đội trưởng ép lệnh trực tiếp từ Tồn Đọng)`
+        };
+
+        let newCustomerId = null;
+        if (checkKh) {
+          await supabase.from('customers').update(payloadCustomer).eq('id', checkKh.id);
+          newCustomerId = checkKh.id;
+        } else {
+          const { data: newKh } = await supabase.from('customers').insert([payloadCustomer]).select();
+          if (newKh && newKh.length > 0) newCustomerId = newKh[0].id;
+        }
+
+        if (newCustomerId) {
+          await supabase.from('suspension_logs').insert([{
+            customer_id: newCustomerId,
+            hanh_dong: 'Đội trưởng ép lệnh',
+            noi_dung: `Đội trưởng đã xác minh khách Hẹn Lại KHÔNG ĐÓNG. Yêu cầu CẮT ĐIỆN!`
+          }]);
+        }
+      }
+
+      // SAU KHI ĐỒNG BỘ XONG (HOẶC NẾU LÀ ĐÃ THU) -> CẬP NHẬT CA VÀ ĐÓNG DẤU ĐỘI TRƯỞNG
+      await supabase.from('danh_sach_doc_thu')
+        .update({ 
+          trang_thai_hien_tai: hanhDong, 
+          nguoi_phu_trach: 'ĐỘI TRƯỞNG', // Ghi dấu ấn để biết ai đã chốt ca này
+          ngay_nap_du_lieu: new Date().toISOString() // Kéo ca này về ngày hôm nay để đưa lên Tổng Quan
+        })
+        .eq('id', ca.id);
+
+      toast.success(`Đã chốt: ${tenHanhDong}`, { id: toastId });
+      fetchAllData(); 
+    } catch (error) {
+      toast.error('Lỗi khi xử lý!', { id: toastId });
+    }
+  };
+	
     if (selectedMicroTasks.length === 0) return;
     const isoNow = new Date().toISOString();
     const toastId = toast.loading(`Chuyển ca sang ${tenThoNhan}...`);
@@ -715,20 +785,41 @@ export default function PhanCongDashboard() {
                         <span className="font-mono text-slate-400 font-bold"><i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}</span>
                       </div>
 
-                      {/* Nút tái phân công nhanh cho ca tồn đọng chưa xử lý */}
-                      {backlogTab === 'chua_xu_ly' && (
-                        <div className="flex gap-1 mt-1.5 border-t pt-1.5 overflow-x-auto no-scrollbar">
-                          {DANH_SACH_THO.map(tho => (
+                      {/* CÁC NÚT TÁC NGHIỆP TÙY THEO TAB TỒN ĐỌNG */}
+                      <div className="flex gap-1 mt-1.5 border-t border-slate-100 pt-1.5 overflow-x-auto no-scrollbar items-center">
+                        
+                        {/* Nút Xử lý trực tiếp (Chỉ dành cho Đội trưởng ở tab Khách hẹn lại) */}
+                        {backlogTab === 'hen_lai' && (
+                          <>
                             <button
-                              key={tho}
-                              onClick={() => handleGiaoCumTru([c], tho)}
-                              className="bg-slate-50 hover:bg-blue-50 border border-slate-200 text-slate-600 px-2 py-1 rounded text-[9px] font-bold shrink-0"
+                              onClick={() => handleDoiTruongXuLyTonDong(c, 'da_thu')}
+                              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
                             >
-                              Giao {tho}
+                              <i className="fa-solid fa-check"></i> CHỐT ĐÃ THU
                             </button>
-                          ))}
-                        </div>
-                      )}
+                            <button
+                              onClick={() => handleDoiTruongXuLyTonDong(c, 'da_chuyen_cat_dien')}
+                              className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
+                            >
+                              <i className="fa-solid fa-scissors"></i> CHUYỂN CẮT ĐIỆN
+                            </button>
+                            {/* Dấu gạch đứng ngăn cách */}
+                            <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0"></div>
+                          </>
+                        )}
+
+                        {/* Nút Giao việc cho thợ (Hiện ở cả 2 tab) */}
+                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">Giao thợ:</span>
+                        {DANH_SACH_THO.map(tho => (
+                          <button
+                            key={tho}
+                            onClick={() => handleGiaoCumTru([c], tho)}
+                            className="bg-white hover:bg-blue-50 border border-slate-200 text-slate-600 hover:text-blue-700 px-2 py-1.5 rounded text-[9px] font-bold shrink-0 transition-colors"
+                          >
+                            {tho}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
