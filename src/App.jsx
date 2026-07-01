@@ -89,7 +89,7 @@ function App() {
             
             {canNhanViec && (
               <button onClick={() => setActiveTab('nhanviec')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'nhanviec' ? 'text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}>
-                <i className={`text-xl mb-1 ${activeTab === 'nhanviec' ? 'fa-solid fa-helmet-safety' : 'fa-solid fa-hard-hat'}`}></i>
+                <i className={`text-xl mb-1 ${activeTab === 'nhanviec' ? 'fa-solid fa-screwdriver-wrench' : 'fa-solid fa-wrench'}`}></i>
                 <span className="text-[10px] font-bold uppercase tracking-wide">Nhận Việc</span>
               </button>
             )}
