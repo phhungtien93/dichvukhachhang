@@ -66,13 +66,76 @@ function App() {
   const canDieuHanh = isAdmin || access.includes('app_dieu_hanh');
   const canThongKe = isAdmin || access.includes('app_thong_ke');
 
-  // CHỐT CHẶN BẢO MẬT & ĐIỀU HƯỚNG HIỂN THỊ
+  // CHỐT CHẶN BẢO MẬT: TỰ DỰNG GIAO DIỆN ĐĂNG NHẬP NỘI BỘ (KHÔNG PHỤ THUỘC FILE NGOÀI)
   if (!session) {
-    // Nếu chưa đăng nhập (hoặc vừa bấm Đăng xuất), render ra Component Auth (Đăng nhập)
-    // Lưu ý: Đảm bảo bạn đã có Component Auth (hoặc Login) trong thư mục components
-    // Import nó ở đầu file: import Auth from './components/Auth'; (Nếu chưa có thì phải thêm nhé!)
-    const Auth = require('./components/Auth').default; // Dùng require cho an toàn nếu bạn lỡ quên import ở trên cùng
-    return <Auth />;
+    const handleInlineLogin = async (e) => {
+      e.preventDefault();
+      const email = e.target.elements.email.value;
+      const password = e.target.elements.password.value;
+      
+      const toastId = toast.loading('Đang xác thực tài khoản...');
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success('Đăng nhập thành công!', { id: toastId });
+      } catch (err) {
+        toast.error(err.message || 'Sai tài khoản hoặc mật khẩu!', { id: toastId });
+      }
+    };
+
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-xl fade-in">
+          
+          {/* Tiêu đề hệ thống */}
+          <div className="text-center mb-6">
+            <h2 className="font-black text-xl text-slate-800 tracking-tight uppercase">
+              Hệ thống <span className="text-blue-600">Đốc Thu</span>
+            </h2>
+            <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-wider">
+              Vui lòng đăng nhập để tiếp tục việc điều phối
+            </p>
+          </div>
+
+          {/* Form đăng nhập */}
+          <form onSubmit={handleInlineLogin} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wide">
+                Tài khoản (Email)
+              </label>
+              <input 
+                name="email" 
+                type="email" 
+                required 
+                placeholder="nhanvien@company.com" 
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-semibold text-slate-700"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wide">
+                Mật khẩu
+              </label>
+              <input 
+                name="password" 
+                type="password" 
+                required 
+                placeholder="••••••••" 
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-semibold text-slate-700"
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all mt-2 uppercase tracking-wider"
+            >
+              Đăng Nhập
+            </button>
+          </form>
+
+        </div>
+      </div>
+    );
   }
 
   // Nếu đang loading thông tin Profile thì hiển thị màn hình chờ mượt mà
