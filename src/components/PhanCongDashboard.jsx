@@ -32,6 +32,9 @@ export default function PhanCongDashboard() {
   
   // BIẾN MỚI: DÀNH CHO Ô TRA CỨU NHANH TRỰC TIẾP
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
+  
+  // BIẾN MỚI: DÀNH CHO POPUP TIẾN ĐỘ CÁ NHÂN
+  const [selectedWorkerProgress, setSelectedWorkerProgress] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -262,6 +265,40 @@ export default function PhanCongDashboard() {
         (c.so_dien_thoai && c.so_dien_thoai.includes(quickSearchQuery))
       ).slice(0, 5); // Chỉ lấy 5 kết quả đầu tiên để chống tràn màn hình
 
+  // === THUẬT TOÁN TÍNH TIẾN ĐỘ CÁ NHÂN ===
+  const tienDoTho = {};
+  danhSachTho.forEach(tho => {
+    tienDoTho[tho.id] = {
+      thoObj: tho,
+      tongCa: 0,
+      daXuLy: 0,
+      chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 }
+    };
+  });
+
+  caHomNay.forEach(c => {
+    // Ưu tiên tho_id, nếu không có thì dò qua tên (để tương thích ngược)
+    const thoId = c.tho_id || (danhSachTho.find(t => t.ho_ten === c.nguoi_phu_trach)?.id);
+    if (thoId && tienDoTho[thoId]) {
+      tienDoTho[thoId].tongCa++;
+      
+      // Tính số ca đã xử lý (Mọi trạng thái khác 'chua_xu_ly' đều tính là đã đụng tay vào)
+      if (c.trang_thai_hien_tai !== 'chua_xu_ly') {
+        tienDoTho[thoId].daXuLy++;
+      }
+      
+      // Bóc tách chi tiết từng trạng thái
+      if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoTho[thoId].chiTiet.hen_lai++;
+      else if (c.trang_thai_hien_tai === 'da_thu') tienDoTho[thoId].chiTiet.da_thu++;
+      else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoTho[thoId].chiTiet.da_cat++;
+      else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoTho[thoId].chiTiet.xac_minh++;
+      else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoTho[thoId].chiTiet.chua_xu_ly++;
+    }
+  });
+
+  // Chỉ lấy những thợ có được phân việc và xếp người nhiều việc nhất lên đầu
+  const danhSachTienDoTho = Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
+
   // 3. Phân loại Giỏ Việc Thợ (Đẩy 'loi_dong_bo_kd' vào list hoàn thành để biến mất khỏi app Thợ)
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
   const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
@@ -410,7 +447,7 @@ export default function PhanCongDashboard() {
   // BỔ SUNG LỆNH RETURN BỊ THIẾU Ở ĐÂY
   return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in">
-      <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
+      <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
         <div>
           <h2 className="font-black text-lg text-slate-800 tracking-tight">ĐIỀU PHỐI <span className="text-blue-600">ĐỐC THU</span></h2>
           <p className="text-[10px] text-slate-500 font-bold uppercase">Tổng: {caChuaGiao.length} ca chưa phân công</p>
@@ -538,7 +575,7 @@ export default function PhanCongDashboard() {
           <div className="fade-in space-y-3">
             
             {/* === Ô TRA CỨU NHANH (LIVE SEARCH) ĐẶT TRÊN CÙNG === */}
-            <div className="relative z-10">
+            <div className="relative z-30">
               <div className="relative flex items-center">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-500">
                   <i className="fa-solid fa-magnifying-glass"></i>
@@ -600,6 +637,39 @@ export default function PhanCongDashboard() {
                 </div>
               )}
             </div>
+
+            {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN ================= */}
+            {danhSachTienDoTho.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0 p-3">
+                <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-3">
+                  <i className="fa-solid fa-bars-progress text-blue-500"></i> Tiến độ cá nhân
+                </h3>
+                <div className="flex overflow-x-auto gap-2.5 pb-1 no-scrollbar">
+                  {danhSachTienDoTho.map(tienDo => {
+                    const pt = tienDo.tongCa === 0 ? 0 : Math.round((tienDo.daXuLy / tienDo.tongCa) * 100);
+                    return (
+                      <div 
+                        key={tienDo.thoObj.id} 
+                        onClick={() => setSelectedWorkerProgress(tienDo)}
+                        className="shrink-0 w-[150px] border border-slate-200 rounded-lg p-2.5 bg-slate-50 cursor-pointer active:scale-95 transition-all hover:border-blue-400 hover:shadow-sm"
+                      >
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="font-bold text-[11px] text-slate-700 truncate max-w-[100px]">{tienDo.thoObj.ho_ten}</span>
+                          <span className="text-[10px] font-black text-blue-600">{pt}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mb-1.5 shadow-inner">
+                          <div className={`h-full rounded-full transition-all duration-700 ${pt === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pt}%` }}></div>
+                        </div>
+                        <div className="flex justify-between items-center text-[9px]">
+                          <span className="text-slate-400 font-bold uppercase">Hoàn thành</span>
+                          <span className="text-slate-600 font-black">{tienDo.daXuLy}/{tienDo.tongCa}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* ================= BẮT ĐẦU KHU VỰC TỔNG QUAN ================= */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
@@ -1035,7 +1105,7 @@ export default function PhanCongDashboard() {
 
       {/* GIỎ HÀNG THỢ (Ẩn đi nếu đang xem Lịch sử để tối ưu không gian màn hình) */}
       {mainTab === 'phan_cong' && (
-        <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-40 transition-all duration-300 relative shrink-0">
+        <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-20 transition-all duration-300 relative shrink-0">
         <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-2"></div>
         <div className="px-4 pb-2">
           <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center justify-between mb-3">
@@ -1131,6 +1201,48 @@ export default function PhanCongDashboard() {
           </div>
         )}
       </div>
+
+      {/* ================= POPUP CHI TIẾT TIẾN ĐỘ CÁ NHÂN ================= */}
+      {selectedWorkerProgress && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-3 fade-in backdrop-blur-sm">
+          <div className="bg-slate-100 rounded-xl w-full max-w-xs overflow-hidden shadow-2xl slide-up">
+            <div className="p-3.5 bg-blue-600 text-white flex justify-between items-center shadow-sm">
+              <h3 className="font-bold text-xs uppercase tracking-wider flex items-center gap-2 truncate">
+                <i className="fa-solid fa-user-check"></i>
+                <span className="truncate">{selectedWorkerProgress.thoObj.ho_ten}</span>
+              </h3>
+              <button onClick={() => setSelectedWorkerProgress(null)} className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors"><i className="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div className="p-3 bg-white grid grid-cols-2 gap-2">
+              <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-2.5 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-2xl font-black text-emerald-700 leading-none mb-1">{selectedWorkerProgress.chiTiet.da_thu}</span>
+                <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tight">Đã thu tiền</span>
+              </div>
+              <div className="border border-red-200 bg-red-50 rounded-lg p-2.5 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-2xl font-black text-red-700 leading-none mb-1">{selectedWorkerProgress.chiTiet.da_cat}</span>
+                <span className="text-[9px] font-bold text-red-600 uppercase tracking-tight">Đã cắt điện</span>
+              </div>
+              <div className="border border-orange-200 bg-orange-50 rounded-lg p-2.5 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-2xl font-black text-orange-700 leading-none mb-1">{selectedWorkerProgress.chiTiet.hen_lai}</span>
+                <span className="text-[9px] font-bold text-orange-600 uppercase tracking-tight">Khách hẹn lại</span>
+              </div>
+              <div className="border border-amber-200 bg-amber-50 rounded-lg p-2.5 flex flex-col items-center justify-center text-center shadow-sm">
+                <span className="text-2xl font-black text-amber-700 leading-none mb-1">{selectedWorkerProgress.chiTiet.xac_minh}</span>
+                <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tight">Chờ duyệt bill</span>
+              </div>
+            </div>
+            
+            <div className="p-3 bg-slate-50 border-t border-slate-200">
+               <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 flex justify-between items-center shadow-sm">
+                 <span className="font-bold text-xs text-blue-800 uppercase flex items-center gap-2">
+                   <i className="fa-solid fa-file-circle-question"></i> Chưa xử lý
+                 </span>
+                 <span className="text-2xl font-black text-blue-700 leading-none">{selectedWorkerProgress.chiTiet.chua_xu_ly}</span>
+               </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
