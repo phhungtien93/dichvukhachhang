@@ -11,49 +11,44 @@ export default function ThongKeDashboard() {
   const [denNgay, setDenNgay] = useState(() => localStorage.getItem('evn_tk_den_ngay') || todayStr);
   const [loading, setLoading] = useState(false);
   
-  // CÁC MẢNG DỮ LIỆU ĐỂ ĐỔ VÀO POPUP TRA CỨU NHANH
+  // ================= CÁC MẢNG DỮ LIỆU ĐỂ ĐỔ VÀO POPUP TRA CỨU NHANH =================
   const [listTroNgai, setListTroNgai] = useState([]);
   const [listXacMinh, setListXacMinh] = useState([]);
-  const [listDaCat, setListDaCat] = useState([]);
+  const [listDaCat, setListDaCat] = useState([]); // Tổng cắt
+  const [listCatNoCuoc, setListCatNoCuoc] = useState([]); // Cắt do nợ
+  const [listCatViPham, setListCatViPham] = useState([]); // Cắt do vi phạm
+  const [listCatYeuCau, setListCatYeuCau] = useState([]); // Cắt do yêu cầu
   const [listNoDinhKy, setListNoDinhKy] = useState([]);
+  const [listNhiemVuKep, setListNhiemVuKep] = useState([]);
   
   // DỮ LIỆU THỐNG KÊ CHI TIẾT
-  const [stats, setStats] = useState({
-    catNoCuoc: 0, catViPham: 0, catYeuCau: 0, nhepVuKep: 0
-  });
   const [dsNangSuat, setDsNangSuat] = useState([]);
-  
   const [detailModal, setDetailModal] = useState({ isOpen: false, title: '', type: '', data: [] });
 
   const fetchThongKe = async () => {
     setLoading(true);
     try {
-      // 1. TẢI TOÀN BỘ HỒ SƠ ĐỂ XEM BỨC TRANH LƯỚI ĐIỆN HIỆN TẠI
+      // 1. TẢI TOÀN BỘ HỒ SƠ ĐỂ XEM BỨC TRANH LƯỚI ĐIỆN HIỆN TẠI (LIVE SNAPSHOT)
       const { data: customersData, error: cError } = await supabase.from('customers').select('*');
       if (cError) throw cError;
       const allKh = customersData || [];
 
       // BÓC TÁCH KHỐI 1 & 3: ĐIỂM NGHẼN & KỸ THUẬT
-      const troNgai = allKh.filter(c => c.trang_thai === 'tro_ngai');
-      const xacMinh = allKh.filter(c => c.trang_thai === 'cho_xac_minh');
-      const noDinhKy = allKh.filter(c => c.chua_thay_dinh_ky === true);
-      
-      setListTroNgai(troNgai);
-      setListXacMinh(xacMinh);
-      setListNoDinhKy(noDinhKy);
+      setListTroNgai(allKh.filter(c => c.trang_thai === 'tro_ngai'));
+      setListXacMinh(allKh.filter(c => c.trang_thai === 'cho_xac_minh'));
+      setListNoDinhKy(allKh.filter(c => c.chua_thay_dinh_ky === true));
 
-      // BÓC TÁCH KHỐI 2: PHÂN TÍCH NGƯNG HƠI
+      // BÓC TÁCH KHỐI 2: PHÂN TÍCH NGƯNG HƠI ĐỂ CLICK ĐƯỢC
       const daCat = allKh.filter(c => c.trang_thai === 'da_cat');
       setListDaCat(daCat);
+      setListCatNoCuoc(daCat.filter(c => c.ly_do_ngung === 'no_cuoc'));
+      setListCatViPham(daCat.filter(c => c.ly_do_ngung === 'bat_thuong'));
+      setListCatYeuCau(daCat.filter(c => c.ly_do_ngung === 'kh_yeu_cau'));
       
-      setStats({
-        catNoCuoc: daCat.filter(c => c.ly_do_ngung === 'no_cuoc').length,
-        catViPham: daCat.filter(c => c.ly_do_ngung === 'bat_thuong').length,
-        catYeuCau: daCat.filter(c => c.ly_do_ngung === 'kh_yeu_cau').length,
-        nhiemVuKep: daCat.filter(c => c.chua_thay_dinh_ky === true).length // Vừa mất điện vừa nợ ĐK
-      });
+      // BÓC TÁCH NHIỆM VỤ KÉP (Vừa mất điện + Vừa nợ định kỳ)
+      setListNhiemVuKep(daCat.filter(c => c.chua_thay_dinh_ky === true));
 
-      // 2. TẢI NHẬT KÝ ĐỂ ĐO LƯỜNG NĂNG SUẤT THỢ THEO NGÀY
+      // 2. TẢI NHẬT KÝ ĐỂ ĐO LƯỜNG NĂNG SUẤT THỢ TRONG KHOẢNG THỜI GIAN ĐÃ CHỌN
       const startDateTime = `${tuNgay}T00:00:00.000Z`;
       const endDateTime = `${denNgay}T23:59:59.999Z`;
 
@@ -70,7 +65,7 @@ export default function ThongKeDashboard() {
         const hanhDong = log.hanh_dong || '';
         const noiDung = log.noi_dung || '';
 
-        // Thuật toán gắp tên nhân viên từ Log
+        // Thuật toán gắp tên nhân viên từ Log (Bảo toàn tương thích với dữ liệu cũ)
         let nhanVien = 'Khác (VP/Hệ thống)';
         const nameMatch = noiDung.match(/(?:\(Bởi:?\s*|-\s*Lập bởi\s*)([^)\n]+)/);
         if (nameMatch && nameMatch[1]) nhanVien = nameMatch[1].trim();
@@ -79,12 +74,13 @@ export default function ThongKeDashboard() {
           nangSuatMap[nhanVien] = { ten: nhanVien, caCat: 0, caDong: 0, thayDK: 0 };
         }
         
+        // Đếm KPI hiện trường thuần túy
         if (hanhDong === 'Ngưng hơi' || hanhDong === 'Xác nhận Cắt điện') nangSuatMap[nhanVien].caCat++;
         if (hanhDong === 'Đóng điện') nangSuatMap[nhanVien].caDong++;
         if (hanhDong === 'Thay điện kế') nangSuatMap[nhanVien].thayDK++;
       });
 
-      // Xếp hạng: Ưu tiên đếm tổng khối lượng công việc hiện trường
+      // Xếp hạng: Ưu tiên người làm nhiều thao tác vật lý nhất
       const arrNangSuat = Object.values(nangSuatMap)
         .filter(nv => nv.caCat > 0 || nv.caDong > 0 || nv.thayDK > 0)
         .sort((a, b) => (b.caCat + b.caDong + b.thayDK) - (a.caCat + a.caDong + a.thayDK));
@@ -103,6 +99,7 @@ export default function ThongKeDashboard() {
     window.dispatchEvent(new Event('evn_trigger_jump'));
     setDetailModal({ ...detailModal, isOpen: false });
     
+    // Tự động kích hoạt bấm nút chuyển Tab Điều Hành
     const btnDieuHanh = document.getElementById('btn-tab-dieu-hanh');
     if (btnDieuHanh) btnDieuHanh.click();
     else toast.success('Đã nạp hồ sơ! Hãy bấm sang Tab ĐIỀU HÀNH để xem.');
@@ -114,11 +111,10 @@ export default function ThongKeDashboard() {
     if (tuNgay && denNgay) fetchThongKe();
   }, [tuNgay, denNgay]);
 
-  // ================= GIAO DIỆN =================
   return (
     <div className="w-full max-w-md mx-auto p-3 space-y-4 pb-24 fade-in">
       
-      {/* KHỐI 1: BỘ LỌC THỜI GIAN (GIỮ NGUYÊN) */}
+      {/* KHỐI 1: BỘ LỌC THỜI GIAN */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-sm font-bold text-slate-800 mb-3 uppercase flex items-center gap-2">
           <i className="fa-regular fa-calendar-days text-blue-600"></i> Bộ Lọc Thời Gian
@@ -165,30 +161,33 @@ export default function ThongKeDashboard() {
 
       {/* KHỐI 3: PHÂN TÍCH LƯỚI ĐIỆN & KỸ THUẬT */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center cursor-pointer" onClick={() => setDetailModal({ isOpen: true, type: 'cat', title: 'Tổng Ca Đang Ngưng Hơi', data: listDaCat })}>
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center cursor-pointer hover:bg-slate-100" onClick={() => setDetailModal({ isOpen: true, type: 'cat', title: 'Tổng Ca Đang Ngưng Hơi', data: listDaCat })}>
           <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
             <i className="fa-solid fa-satellite-dish text-blue-600"></i> Trạng Thái Lưới Điện
           </h3>
-          <span className="bg-slate-800 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">{listDaCat.length} Đang Cắt</span>
+          <span className="bg-slate-800 text-white font-bold text-[10px] px-2 py-0.5 rounded-full shadow-sm">{listDaCat.length} Đang Cắt</span>
         </div>
         
-        <div className="p-3 grid grid-cols-3 gap-2 border-b border-slate-100 bg-slate-50/50">
-          <div className="text-center p-2 bg-white rounded border border-slate-200">
-            <div className="text-lg font-black text-slate-700">{stats.catNoCuoc}</div>
-            <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Do Nợ Cước</div>
+        {/* === ĐÃ CẬP NHẬT MÀU PASTEL VÀ SỰ KIỆN CLICK CHO 3 Ô NÀY === */}
+        <div className="p-3 grid grid-cols-3 gap-2 border-b border-slate-100 bg-white">
+          <div onClick={() => setDetailModal({ isOpen: true, type: 'catNoCuoc', title: 'Đang Cắt Do Nợ Cước', data: listCatNoCuoc })} className="text-center p-2 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer active:scale-95 hover:ring-2 hover:ring-blue-300 transition-all">
+            <div className="text-lg font-black text-blue-700">{listCatNoCuoc.length}</div>
+            <div className="text-[8px] font-bold text-blue-600 uppercase tracking-wider mt-0.5">Do Nợ Cước</div>
           </div>
-          <div className="text-center p-2 bg-white rounded border border-slate-200">
-            <div className="text-lg font-black text-slate-700">{stats.catYeuCau}</div>
-            <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">KH Yêu Cầu</div>
+          
+          <div onClick={() => setDetailModal({ isOpen: true, type: 'catYeuCau', title: 'Đang Cắt Theo Yêu Cầu', data: listCatYeuCau })} className="text-center p-2 rounded-lg border border-indigo-200 bg-indigo-50 cursor-pointer active:scale-95 hover:ring-2 hover:ring-indigo-300 transition-all">
+            <div className="text-lg font-black text-indigo-700">{listCatYeuCau.length}</div>
+            <div className="text-[8px] font-bold text-indigo-600 uppercase tracking-wider mt-0.5">KH Yêu Cầu</div>
           </div>
-          <div className="text-center p-2 bg-white rounded border border-rose-200">
-            <div className="text-lg font-black text-rose-600">{stats.catViPham}</div>
-            <div className="text-[8px] font-bold text-rose-500 uppercase tracking-wider">Vi Phạm</div>
+          
+          <div onClick={() => setDetailModal({ isOpen: true, type: 'catViPham', title: 'Đang Cắt Do Vi Phạm', data: listCatViPham })} className="text-center p-2 rounded-lg border border-rose-200 bg-rose-50 cursor-pointer active:scale-95 hover:ring-2 hover:ring-rose-300 transition-all">
+            <div className="text-lg font-black text-rose-700">{listCatViPham.length}</div>
+            <div className="text-[8px] font-bold text-rose-600 uppercase tracking-wider mt-0.5">Vi Phạm</div>
           </div>
         </div>
 
         <div className="p-3 bg-white flex gap-3">
-          <div onClick={() => setDetailModal({ isOpen: true, type: 'dienke', title: 'Danh Sách Nợ Thay ĐK', data: listNoDinhKy })} className="flex-1 border border-teal-200 bg-teal-50 rounded-lg p-2.5 flex items-center justify-between cursor-pointer active:scale-95 transition-transform">
+          <div onClick={() => setDetailModal({ isOpen: true, type: 'dienke', title: 'Danh Sách Nợ Thay ĐK', data: listNoDinhKy })} className="flex-1 border border-teal-200 bg-teal-50 rounded-lg p-2.5 flex items-center justify-between cursor-pointer active:scale-95 transition-transform hover:ring-2 hover:ring-teal-300">
             <div>
               <div className="text-[9px] font-bold text-teal-600 uppercase">Tồn Thay ĐK</div>
               <div className="text-xl font-black text-teal-700">{listNoDinhKy.length} <span className="text-[10px] font-medium text-teal-600">công tơ</span></div>
@@ -196,21 +195,21 @@ export default function ThongKeDashboard() {
             <i className="fa-solid fa-screwdriver-wrench text-teal-400 text-2xl opacity-50"></i>
           </div>
           
-          <div className="flex-1 border border-orange-200 bg-orange-50 rounded-lg p-2.5 flex items-center justify-between">
+          <div onClick={() => setDetailModal({ isOpen: true, type: 'nhiemvukep', title: 'Cắt Điện & Nợ Định Kỳ', data: listNhiemVuKep })} className="flex-1 border border-orange-200 bg-orange-50 rounded-lg p-2.5 flex items-center justify-between cursor-pointer active:scale-95 transition-transform hover:ring-2 hover:ring-orange-300">
             <div>
               <div className="text-[9px] font-bold text-orange-600 uppercase">Nhiệm vụ kép</div>
-              <div className="text-xl font-black text-orange-700">{stats.nhiemVuKep} <span className="text-[10px] font-medium text-orange-600">ca</span></div>
+              <div className="text-xl font-black text-orange-700">{listNhiemVuKep.length} <span className="text-[10px] font-medium text-orange-600">ca</span></div>
             </div>
             <i className="fa-solid fa-triangle-exclamation text-orange-400 text-2xl opacity-50 animate-pulse"></i>
           </div>
         </div>
       </div>
 
-      {/* KHỐI 4: BẢNG NĂNG SUẤT THỰC THI */}
+      {/* KHỐI 4: BẢNG NĂNG SUẤT THỰC THI HIỆN TRƯỜNG */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
           <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
-            <i className="fa-solid fa-person-digging text-emerald-600"></i> Khối lượng thực thi (Log)
+            <i className="fa-solid fa-person-digging text-emerald-600"></i> Khối lượng thực thi
           </h3>
         </div>
         <div className="overflow-x-auto no-scrollbar">
@@ -248,20 +247,24 @@ export default function ThongKeDashboard() {
       {detailModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-3 fade-in backdrop-blur-sm">
           <div className="bg-slate-100 rounded-xl w-full max-w-sm max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className={`p-3.5 flex justify-between items-center shrink-0 text-white ${
-              detailModal.type === 'cat' ? 'bg-slate-800' : 
+            <div className={`p-3.5 flex justify-between items-center shrink-0 text-white shadow-sm ${
+              detailModal.type === 'cat' ? 'bg-slate-700' : 
+              detailModal.type === 'catNoCuoc' ? 'bg-blue-600' :
+              detailModal.type === 'catYeuCau' ? 'bg-indigo-500' :
+              detailModal.type === 'catViPham' ? 'bg-rose-600' :
               detailModal.type === 'trongai' ? 'bg-red-600' : 
-              detailModal.type === 'xacminh' ? 'bg-amber-600' : 'bg-teal-600'
+              detailModal.type === 'xacminh' ? 'bg-amber-600' : 
+              detailModal.type === 'nhiemvukep' ? 'bg-orange-600' : 'bg-teal-600'
             }`}>
-              <h3 className="font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+              <h3 className="font-bold text-[11px] uppercase tracking-wider flex items-center gap-2">
                 <i className={`fa-solid ${
-                  detailModal.type === 'cat' ? 'fa-satellite-dish' : 
+                  detailModal.type.includes('cat') ? 'fa-satellite-dish' : 
                   detailModal.type === 'trongai' ? 'fa-triangle-exclamation' : 
                   detailModal.type === 'xacminh' ? 'fa-hourglass-half' : 'fa-screwdriver-wrench'
                 }`}></i>
                 {detailModal.title} ({detailModal.data.length})
               </h3>
-              <button onClick={() => setDetailModal({ ...detailModal, isOpen: false })} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+              <button onClick={() => setDetailModal({ ...detailModal, isOpen: false })} className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 w-6 h-6 rounded-full flex items-center justify-center transition-colors"><i className="fa-solid fa-xmark"></i></button>
             </div>
             
             <div className="p-2 overflow-y-auto space-y-1.5 no-scrollbar flex-1 bg-slate-50">
@@ -272,13 +275,17 @@ export default function ThongKeDashboard() {
                   <div key={idx} onClick={() => handleJumpToProcess(item.id)} className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow active:scale-[0.99] transition-all relative overflow-hidden flex flex-col justify-center">
                     <div className={`absolute left-0 top-0 bottom-0 w-1 ${
                       detailModal.type === 'cat' ? 'bg-slate-500' : 
+                      detailModal.type === 'catNoCuoc' ? 'bg-blue-500' : 
+                      detailModal.type === 'catYeuCau' ? 'bg-indigo-400' : 
+                      detailModal.type === 'catViPham' ? 'bg-rose-500' : 
                       detailModal.type === 'trongai' ? 'bg-red-500' : 
-                      detailModal.type === 'xacminh' ? 'bg-amber-500' : 'bg-teal-500'
+                      detailModal.type === 'xacminh' ? 'bg-amber-500' : 
+                      detailModal.type === 'nhiemvukep' ? 'bg-orange-500' : 'bg-teal-500'
                     }`}></div>
                     <div className="pl-2">
                       <div className="flex justify-between items-center mb-0.5">
                         <span className="font-mono font-bold text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-1 rounded">{item.ma_pe || 'TRỐNG MA'}</span>
-                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded">{item.ly_do_ngung === 'no_cuoc' ? 'Nợ cước' : item.ly_do_ngung === 'bat_thuong' ? 'Vi phạm' : 'KH yêu cầu'}</span>
+                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded border border-slate-200">{item.ly_do_ngung === 'no_cuoc' ? 'Nợ cước' : item.ly_do_ngung === 'bat_thuong' ? 'Vi phạm' : 'KH yêu cầu'}</span>
                       </div>
                       <h4 className="font-bold text-xs text-slate-800 truncate">{item.ten_kh || 'Chưa rõ tên'}</h4>
                       <p className="text-[10px] text-slate-400 truncate mt-0.5"><i className="fa-solid fa-location-dot text-slate-300 mr-1"></i>{item.dia_chi || 'Không có địa chỉ'}</p>
@@ -289,7 +296,7 @@ export default function ThongKeDashboard() {
             </div>
             
             <div className="bg-white p-2 text-center border-t border-slate-200 shrink-0">
-               <p className="text-[9px] text-slate-500 font-bold"><i className="fa-solid fa-hand-pointer text-blue-500 mr-1 animate-bounce"></i>Bấm vào dòng để nhảy sang Bảng Điều Hành</p>
+               <p className="text-[9px] text-slate-500 font-bold"><i className="fa-solid fa-hand-pointer text-blue-500 mr-1 animate-bounce"></i>Bấm vào một dòng để chuyển sang Bảng Điều Hành</p>
             </div>
           </div>
         </div>
