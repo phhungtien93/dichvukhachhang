@@ -14,6 +14,7 @@ export default function ThongKeDashboard() {
   // ================= CÁC MẢNG DỮ LIỆU ĐỂ ĐỔ VÀO POPUP TRA CỨU NHANH =================
   const [listTroNgai, setListTroNgai] = useState([]);
   const [listXacMinh, setListXacMinh] = useState([]);
+  const [listChoCat, setListChoCat] = useState([]); // THÊM MỚI: Chờ cắt điện
   const [listDaCat, setListDaCat] = useState([]); // Tổng cắt
   const [listCatNoCuoc, setListCatNoCuoc] = useState([]); // Cắt do nợ
   const [listCatViPham, setListCatViPham] = useState([]); // Cắt do vi phạm
@@ -36,6 +37,7 @@ export default function ThongKeDashboard() {
       // BÓC TÁCH KHỐI 1 & 3: ĐIỂM NGHẼN & KỸ THUẬT
       setListTroNgai(allKh.filter(c => c.trang_thai === 'tro_ngai'));
       setListXacMinh(allKh.filter(c => c.trang_thai === 'cho_xac_minh'));
+      setListChoCat(allKh.filter(c => c.trang_thai === 'cho_cat_dien')); // THÊM MỚI: Tách ca chờ cắt
       setListNoDinhKy(allKh.filter(c => c.chua_thay_dinh_ky === true));
 
       // BÓC TÁCH KHỐI 2: PHÂN TÍCH NGƯNG HƠI ĐỂ CLICK ĐƯỢC
@@ -136,27 +138,36 @@ export default function ThongKeDashboard() {
         </div>
       </div>
 
-      {/* KHỐI 2: ĐIỂM NGHẼN VẬN HÀNH (URGENT BOTTLENECKS) */}
-      <div className="grid grid-cols-2 gap-3">
-        <div onClick={() => setDetailModal({ isOpen: true, type: 'trongai', title: 'Cần gỡ vướng Trở Ngại', data: listTroNgai })} className="cursor-pointer bg-red-50 p-3 rounded-xl border border-red-200 shadow-sm flex items-center gap-3 active:scale-95 transition-transform hover:ring-2 hover:ring-red-300">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <i className="fa-solid fa-triangle-exclamation text-red-600 text-lg"></i>
+      {/* KHỐI 2: ĐIỂM NGHẼN VẬN HÀNH (URGENT BOTTLENECKS) - ÉP 3 CỘT NGANG RÚT GỌN */}
+      <div className="grid grid-cols-3 gap-2">
+        
+        {/* Ô 1: Trở Ngại (Đỏ) */}
+        <div onClick={() => setDetailModal({ isOpen: true, type: 'trongai', title: 'Cần gỡ vướng Trở Ngại', data: listTroNgai })} className="cursor-pointer bg-red-50 p-2.5 rounded-xl border border-red-200 shadow-sm flex flex-col items-center justify-center text-center active:scale-95 transition-transform hover:ring-2 hover:ring-red-300">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <i className="fa-solid fa-triangle-exclamation text-red-500 text-sm"></i>
+            <span className="text-xl font-black text-red-700 leading-none">{listTroNgai.length}</span>
           </div>
-          <div>
-            <div className="text-2xl font-black text-red-700 leading-none">{listTroNgai.length}</div>
-            <div className="text-[9px] font-bold text-red-600 uppercase mt-1">Ca Trở Ngại</div>
-          </div>
+          <div className="text-[9px] font-bold text-red-600 uppercase tracking-tight">Trở Ngại</div>
         </div>
 
-        <div onClick={() => setDetailModal({ isOpen: true, type: 'xacminh', title: 'Chờ VP Xác Minh Bill', data: listXacMinh })} className="cursor-pointer bg-amber-50 p-3 rounded-xl border border-amber-200 shadow-sm flex items-center gap-3 active:scale-95 transition-transform hover:ring-2 hover:ring-amber-300">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-            <i className="fa-solid fa-hourglass-half text-amber-600 text-lg"></i>
+        {/* Ô 2: Duyệt Bill (Vàng Amber) */}
+        <div onClick={() => setDetailModal({ isOpen: true, type: 'xacminh', title: 'Chờ VP Xác Minh Bill', data: listXacMinh })} className="cursor-pointer bg-amber-50 p-2.5 rounded-xl border border-amber-200 shadow-sm flex flex-col items-center justify-center text-center active:scale-95 transition-transform hover:ring-2 hover:ring-amber-300">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <i className="fa-solid fa-hourglass-half text-amber-500 text-sm"></i>
+            <span className="text-xl font-black text-amber-700 leading-none">{listXacMinh.length}</span>
           </div>
-          <div>
-            <div className="text-2xl font-black text-amber-700 leading-none">{listXacMinh.length}</div>
-            <div className="text-[9px] font-bold text-amber-600 uppercase mt-1">Chờ Duyệt Bill</div>
-          </div>
+          <div className="text-[9px] font-bold text-amber-600 uppercase tracking-tight">Duyệt Bill</div>
         </div>
+
+        {/* Ô 3: Chờ Cắt (Cam) */}
+        <div onClick={() => setDetailModal({ isOpen: true, type: 'chocat', title: 'Chờ VP Xác Nhận Cắt', data: listChoCat })} className="cursor-pointer bg-orange-50 p-2.5 rounded-xl border border-orange-200 shadow-sm flex flex-col items-center justify-center text-center active:scale-95 transition-transform hover:ring-2 hover:ring-orange-300">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <i className="fa-solid fa-power-off text-orange-500 text-sm"></i>
+            <span className="text-xl font-black text-orange-700 leading-none">{listChoCat.length}</span>
+          </div>
+          <div className="text-[9px] font-bold text-orange-600 uppercase tracking-tight">Chờ Cắt</div>
+        </div>
+
       </div>
 
       {/* KHỐI 3: PHÂN TÍCH LƯỚI ĐIỆN & KỸ THUẬT */}
@@ -254,10 +265,12 @@ export default function ThongKeDashboard() {
               detailModal.type === 'catViPham' ? 'bg-rose-600' :
               detailModal.type === 'trongai' ? 'bg-red-600' : 
               detailModal.type === 'xacminh' ? 'bg-amber-600' : 
+              detailModal.type === 'chocat' ? 'bg-orange-500' : 
               detailModal.type === 'nhiemvukep' ? 'bg-orange-600' : 'bg-teal-600'
             }`}>
               <h3 className="font-bold text-[11px] uppercase tracking-wider flex items-center gap-2">
                 <i className={`fa-solid ${
+                  detailModal.type === 'chocat' ? 'fa-power-off' :
                   detailModal.type.includes('cat') ? 'fa-satellite-dish' : 
                   detailModal.type === 'trongai' ? 'fa-triangle-exclamation' : 
                   detailModal.type === 'xacminh' ? 'fa-hourglass-half' : 'fa-screwdriver-wrench'
@@ -280,6 +293,7 @@ export default function ThongKeDashboard() {
                       detailModal.type === 'catViPham' ? 'bg-rose-500' : 
                       detailModal.type === 'trongai' ? 'bg-red-500' : 
                       detailModal.type === 'xacminh' ? 'bg-amber-500' : 
+                      detailModal.type === 'chocat' ? 'bg-orange-400' : 
                       detailModal.type === 'nhiemvukep' ? 'bg-orange-500' : 'bg-teal-500'
                     }`}></div>
                     <div className="pl-2">
