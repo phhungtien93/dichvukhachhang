@@ -4,81 +4,113 @@ import ThongKeDashboard from './components/ThongKeDashboard';
 import PhanCongDashboard from './components/PhanCongDashboard';
 import GiaoDienTho from './components/GiaoDienTho';
 import { Toaster } from 'react-hot-toast';
-import { supabase } from './supabase'; 
+import { supabase } from './supabase';
 
 function App() {
-  // Thay vì tách 'view', ta gộp tất cả vào activeTab. Mặc định mở Tab Điều Hành.
-  const [activeTab, setActiveTab] = useState('danhsach');
-  const [session, setSession] = useState(null); 
+  const [activeTab, setActiveTab] = useState('danhsach'); 
+  const [session, setSession] = useState(null);
+  
+  // BIẾN MỚI: Tải Profile để lấy quyền ngay từ lúc khởi động app
+  const [profile, setProfile] = useState(null);
+  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else setIsProfileLoaded(true);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else { setProfile(null); setIsProfileLoaded(true); }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const fetchProfile = async (userId) => {
+    const { data } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+    setProfile(data);
+    setIsProfileLoaded(true);
+  };
+
+  // LOGIC ĐIỀU HƯỚNG TỰ ĐỘNG: Đá user về đúng màn hình họ có quyền
+  useEffect(() => {
+    if (isProfileLoaded && profile && profile.role !== 'admin') {
+      const access = profile.tabs_access || [];
+      let isAllowed = false;
+      
+      if (activeTab === 'phancong' && access.includes('app_phan_cong')) isAllowed = true;
+      if (activeTab === 'nhanviec' && access.includes('app_nhan_viec')) isAllowed = true;
+      if (activeTab === 'danhsach' && access.includes('app_dieu_hanh')) isAllowed = true;
+      if (activeTab === 'thongke' && access.includes('app_thong_ke')) isAllowed = true;
+
+      // Nếu đang đứng ở Tab không có quyền -> Tự động chuyển qua Tab hợp lệ đầu tiên
+      if (!isAllowed && access.length > 0) {
+        if (access.includes('app_nhan_viec')) setActiveTab('nhanviec');
+        else if (access.includes('app_dieu_hanh')) setActiveTab('danhsach');
+        else if (access.includes('app_phan_cong')) setActiveTab('phancong');
+        else if (access.includes('app_thong_ke')) setActiveTab('thongke');
+      }
+    }
+  }, [profile, isProfileLoaded, activeTab]);
+
+  // KIỂM TRA QUYỀN ĐỂ ẨN/HIỆN NÚT BẤM DƯỚI ĐÁY MÀN HÌNH
+  const isAdmin = profile?.role === 'admin';
+  const access = profile?.tabs_access || [];
+  
+  const canPhanCong = isAdmin || access.includes('app_phan_cong');
+  const canNhanViec = isAdmin || access.includes('app_nhan_viec');
+  const canDieuHanh = isAdmin || access.includes('app_dieu_hanh');
+  const canThongKe = isAdmin || access.includes('app_thong_ke');
+
   return (
     <div className="h-screen flex flex-col bg-slate-50">
-      
-      {/* KHU VỰC HIỂN THỊ NỘI DUNG CHÍNH DỰA VÀO TAB ĐƯỢC CHỌN */}
       <div className="flex-1 overflow-y-auto pb-28 w-full h-full relative">
-        {activeTab === 'phancong' && <PhanCongDashboard session={session} />}
-        {activeTab === 'nhanviec' && <GiaoDienTho session={session} />}
-        {activeTab === 'danhsach' && <QuanLyDanhSach session={session} />}
-        {activeTab === 'thongke' && <ThongKeDashboard session={session} />}
+        {/* Chỉ truyền Component khi có quyền, tránh render trộm */}
+        {activeTab === 'phancong' && canPhanCong && <PhanCongDashboard session={session} profile={profile} />}
+        {activeTab === 'nhanviec' && canNhanViec && <GiaoDienTho session={session} profile={profile} />}
+        {activeTab === 'danhsach' && canDieuHanh && <QuanLyDanhSach session={session} profile={profile} />}
+        {activeTab === 'thongke' && canThongKe && <ThongKeDashboard session={session} profile={profile} />}
       </div>
 
-      {/* THANH MENU ĐÁY: ĐÃ TÍCH HỢP 4 TAB CHÍNH */}
-      {session && (
+      {session && isProfileLoaded && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-x border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] rounded-t-xl fade-in">
           <div className="flex justify-around items-center h-16">
-
-            {/* TAB 1: PHÂN CÔNG */}
-            <button 
-              onClick={() => setActiveTab('phancong')} 
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'phancong' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <i className={`text-xl mb-1 ${activeTab === 'phancong' ? 'fa-solid fa-users-gear' : 'fa-solid fa-users'}`}></i>
-              <span className="text-[10px] font-bold uppercase tracking-wide">Phân Công</span>
-            </button>
             
-            {/* TAB 2 (MỚI): NHẬN VIỆC */}
-            <button 
-              onClick={() => setActiveTab('nhanviec')} 
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'nhanviec' ? 'text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <i className={`text-xl mb-1 ${activeTab === 'nhanviec' ? 'fa-solid fa-helmet-safety' : 'fa-solid fa-hard-hat'}`}></i>
-              <span className="text-[10px] font-bold uppercase tracking-wide">Nhận Việc</span>
-            </button>
-
-            {/* TAB 3: ĐIỀU HÀNH */}
-            <button 
-              onClick={() => setActiveTab('danhsach')} 
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <i className={`text-xl mb-1 ${activeTab === 'danhsach' ? 'fa-solid fa-clipboard-list' : 'fa-solid fa-list'}`}></i>
-              <span className="text-[10px] font-bold uppercase tracking-wide">Điều Hành</span>
-            </button>
-
-            {/* TAB 4: THỐNG KÊ */}
-            <button 
-              onClick={() => setActiveTab('thongke')} 
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'thongke' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <i className={`text-xl mb-1 ${activeTab === 'thongke' ? 'fa-solid fa-chart-pie' : 'fa-solid fa-chart-simple'}`}></i>
-              <span className="text-[10px] font-bold uppercase tracking-wide">Thống Kê</span>
-            </button>
+            {canPhanCong && (
+              <button onClick={() => setActiveTab('phancong')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'phancong' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className={`text-xl mb-1 ${activeTab === 'phancong' ? 'fa-solid fa-users-gear' : 'fa-solid fa-users'}`}></i>
+                <span className="text-[10px] font-bold uppercase tracking-wide">Phân Công</span>
+              </button>
+            )}
+            
+            {canNhanViec && (
+              <button onClick={() => setActiveTab('nhanviec')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'nhanviec' ? 'text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className={`text-xl mb-1 ${activeTab === 'nhanviec' ? 'fa-solid fa-helmet-safety' : 'fa-solid fa-hard-hat'}`}></i>
+                <span className="text-[10px] font-bold uppercase tracking-wide">Nhận Việc</span>
+              </button>
+            )}
+            
+            {canDieuHanh && (
+              <button onClick={() => setActiveTab('danhsach')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className={`text-xl mb-1 ${activeTab === 'danhsach' ? 'fa-solid fa-clipboard-list' : 'fa-solid fa-list'}`}></i>
+                <span className="text-[10px] font-bold uppercase tracking-wide">Điều Hành</span>
+              </button>
+            )}
+            
+            {canThongKe && (
+              <button onClick={() => setActiveTab('thongke')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'thongke' ? 'text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`}>
+                <i className={`text-xl mb-1 ${activeTab === 'thongke' ? 'fa-solid fa-chart-pie' : 'fa-solid fa-chart-simple'}`}></i>
+                <span className="text-[10px] font-bold uppercase tracking-wide">Thống Kê</span>
+              </button>
+            )}
 
           </div>
         </div>
       )}
-
       <Toaster position="top-center" reverseOrder={false} />
     </div>
   );
