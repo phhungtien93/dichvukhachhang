@@ -210,7 +210,7 @@ export default function QuanLyDanhSach() {
 
   const resetAdminForm = () => {
     setEditUserId(null); setNewUserName(''); setNewUserEmail(''); setNewUserPassword('');
-    setNewUserRole('user'); setSelectedTabsAccess(['cho_cat', 'da_cat', 'dinh_ky', 'hoan_tat']);
+    setNewUserRole('user'); setSelectedTabsAccess(['app_nhan_viec']); // Mặc định NV mới sẽ là Thợ
   };
 
   const handleCreateUser = async (e) => {
@@ -678,9 +678,18 @@ export default function QuanLyDanhSach() {
                       <div className="pl-2 mt-2 pt-2 border-t border-slate-100">
                         <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Quyền truy cập Tab:</p>
                         <div className="flex flex-wrap gap-1">
-                          {user.tabs_access && user.tabs_access.length > 0 ? user.tabs_access.map(tab => (
-                            <span key={tab} className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded border border-slate-200">{ALL_SYSTEM_TABS.find(t=>t.id===tab)?.name || tab}</span>
-                          )) : <span className="text-[10px] text-red-500 italic">Chưa cấp quyền nào</span>}
+                          {user.tabs_access && user.tabs_access.length > 0 ? user.tabs_access.map(tab => {
+                            let tabName = tab;
+                            let colorClass = "bg-slate-100 text-slate-600 border-slate-200";
+                            
+                            if (tab === 'app_phan_cong') { tabName = 'Phân Công'; colorClass = "bg-blue-50 text-blue-700 border-blue-200 font-bold shadow-sm"; }
+                            else if (tab === 'app_nhan_viec') { tabName = 'Nhận Việc'; colorClass = "bg-amber-50 text-amber-700 border-amber-200 font-bold shadow-sm"; }
+                            else if (tab === 'app_dieu_hanh') { tabName = 'Điều Hành'; colorClass = "bg-indigo-50 text-indigo-700 border-indigo-200 font-bold shadow-sm"; }
+                            else if (tab === 'app_thong_ke') { tabName = 'Thống Kê'; colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold shadow-sm"; }
+                            else { tabName = ALL_SYSTEM_TABS.find(t=>t.id===tab)?.name || tab; }
+                            
+                            return <span key={tab} className={`text-[9px] px-1.5 py-0.5 rounded border ${colorClass}`}>{tabName}</span>;
+                          }) : <span className="text-[10px] text-red-500 italic">Chưa cấp quyền nào</span>}
                         </div>
                       </div>
                     )}
@@ -705,11 +714,42 @@ export default function QuanLyDanhSach() {
                 )}
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phân cấp vai trò</label><select value={newUserRole} onChange={e=>setNewUserRole(e.target.value)} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none font-bold text-blue-700 bg-blue-50/50"><option value="user">Nhân viên thông thường (User)</option><option value="admin">Quản trị viên toàn quyền (Admin)</option></select></div>
                 {newUserRole === 'user' && (
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 fade-in">
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Tích chọn Tab cho phép truy cập:</label>
-                    {ALL_SYSTEM_TABS.map(tab => (
-                      <label key={tab.id} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer select-none text-sm font-semibold hover:bg-slate-50"><input type="checkbox" checked={selectedTabsAccess.includes(tab.id)} onChange={() => handleToggleTabPermission(tab.id)} className="w-4 h-4 text-blue-600 rounded" /><span className="flex items-center gap-2"><i className={`fa-solid ${tab.icon} text-slate-400 w-4 text-center`}></i> Tab {tab.name}</span></label>
-                    ))}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 fade-in">
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-2 border-b border-slate-200 pb-2">Hệ Thống Phân Quyền Phân Hệ</label>
+
+                    <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
+                      <input type="checkbox" checked={selectedTabsAccess.includes('app_phan_cong')} onChange={() => handleToggleTabPermission('app_phan_cong')} className="w-4 h-4 text-blue-600 rounded" />
+                      <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-users-gear text-blue-500 w-5 text-center"></i> Điều Phối (Đội trưởng)</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
+                      <input type="checkbox" checked={selectedTabsAccess.includes('app_nhan_viec')} onChange={() => handleToggleTabPermission('app_nhan_viec')} className="w-4 h-4 text-amber-600 rounded" />
+                      <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-helmet-safety text-amber-500 w-5 text-center"></i> Nhận Việc (Thợ Tuyến)</span>
+                    </label>
+
+                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                      <label className="flex items-center gap-3 p-2.5 cursor-pointer hover:bg-slate-50 border-b border-slate-100 bg-slate-50/50 transition-colors">
+                        <input type="checkbox" checked={selectedTabsAccess.includes('app_dieu_hanh')} onChange={() => handleToggleTabPermission('app_dieu_hanh')} className="w-4 h-4 text-indigo-600 rounded" />
+                        <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-clipboard-list text-indigo-500 w-5 text-center"></i> Điều Hành (Văn phòng)</span>
+                      </label>
+                      
+                      {/* Sub-tabs chỉ sổ ra khi được cấp quyền cửa chính 'app_dieu_hanh' */}
+                      {selectedTabsAccess.includes('app_dieu_hanh') && (
+                        <div className="p-3 bg-white grid grid-cols-2 gap-2">
+                          {ALL_SYSTEM_TABS.map(tab => (
+                             <label key={tab.id} className="flex items-center gap-2 p-1.5 border border-slate-100 rounded cursor-pointer hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={selectedTabsAccess.includes(tab.id)} onChange={() => handleToggleTabPermission(tab.id)} className="w-3.5 h-3.5 text-indigo-500 rounded-sm" />
+                                <span className="text-[10px] font-bold text-slate-600 uppercase">{tab.name}</span>
+                             </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
+                      <input type="checkbox" checked={selectedTabsAccess.includes('app_thong_ke')} onChange={() => handleToggleTabPermission('app_thong_ke')} className="w-4 h-4 text-emerald-600 rounded" />
+                      <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-chart-pie text-emerald-500 w-5 text-center"></i> Thống Kê Báo Cáo</span>
+                    </label>
                   </div>
                 )}
                 <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-sm shadow-md transition-all">{loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (adminView === 'create' ? 'KHỞI TẠO TÀI KHOẢN' : 'LƯU THAY ĐỔI QUYỀN')}</button>
