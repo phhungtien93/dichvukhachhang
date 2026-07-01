@@ -558,7 +558,7 @@ export default function PhanCongDashboard() {
 
                       <div className="flex justify-between items-end mt-1 border-t border-slate-100 pt-1.5">
                         <div>
-                          <p className="text-[9px] text-slate-500 font-bold"><i className="fa-solid fa-hard-hat mr-1"></i>Thợ xử lý: <span className="text-blue-700">{ca.nguoi_phu_trach || 'Chưa rõ'}</span></p>
+                          <p className="text-[9px] text-slate-500 font-bold"><i className="fa-solid fa-hard-hat mr-1"></i>Nv xử lý: <span className="text-blue-700">{ca.nguoi_phu_trach || 'Chưa rõ'}</span></p>
                           <p className="text-[9px] text-slate-500 font-bold mt-0.5"><i className="fa-solid fa-calendar-check mr-1"></i>Cập nhật: {new Date(ca.ngay_nap_du_lieu).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                         </div>
                         <span className="font-mono text-slate-400 font-bold text-[9px]"><i className="fa-solid fa-location-dot mr-1"></i>{ca.ma_tru_sach}</span>
@@ -628,7 +628,7 @@ export default function PhanCongDashboard() {
                             {/* Dòng hiển thị TÊN THỢ PHỤ TRÁCH */}
                             <span className={`font-bold ${ca.nguoi_phu_trach ? 'text-emerald-600' : 'text-slate-400'}`}>
                               <i className={`fa-solid ${ca.nguoi_phu_trach ? 'fa-hard-hat' : 'fa-box-open'} mr-1`}></i> 
-                              {ca.nguoi_phu_trach ? `Thợ: ${ca.nguoi_phu_trach}` : 'Đang trong kho (Chưa giao)'}
+                              {ca.nguoi_phu_trach ? `Nv: ${ca.nguoi_phu_trach}` : 'Đang trong kho (Chưa giao)'}
                             </span>
                           </div>
                         </div>
@@ -653,7 +653,7 @@ export default function PhanCongDashboard() {
                   </h3>
                   <div className="flex items-center gap-3">
                     <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
-                      {danhSachTienDoTho.length} Thợ
+                      {danhSachTienDoTho.length} Nv
                     </span>
                     <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
                   </div>
@@ -781,7 +781,7 @@ export default function PhanCongDashboard() {
                     {demChuaXuHomNay} <span className="text-[10px] font-bold text-blue-400">/{tongSoCa}</span>
                   </div>
                   <p className="text-[10px] font-black text-blue-800 uppercase tracking-wide">Chưa xử lý</p>
-                  <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ thợ thực thi</p>
+                  <p className="text-[9px] text-blue-600 mt-0.5 font-bold">Đang chờ Nv thực thi</p>
                 </div>
               </div>
 			  
@@ -813,7 +813,7 @@ export default function PhanCongDashboard() {
                   Chi tiết: {
                     overviewTab === 'loi_dong_bo_kd' ? 'Hồ sơ đã tự động tịch thu (Lỗi KD)' :
                     overviewTab === 'hen_lai' ? 'Danh sách khách hẹn khất nợ' : 
-                    overviewTab === 'da_thu' ? 'Danh sách ca thợ đã thu xong' :
+                    overviewTab === 'da_thu' ? 'Danh sách ca nhân viên đã thu xong' :
                     overviewTab === 'da_chuyen_cat_dien' ? 'Danh sách khách hàng đã cắt điện' :
                     overviewTab === 'da_chuyen_xac_minh' ? 'Danh sách cần xác minh giao dịch' :
                     'Danh sách hồ sơ chưa thực hiện'
@@ -842,7 +842,7 @@ export default function PhanCongDashboard() {
                             overviewTab === 'da_chuyen_xac_minh' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                             'bg-blue-50 text-blue-700 border-blue-200'
                           }`}>
-                            THỢ: {c.nguoi_phu_trach || 'CHƯA GIAO'}
+                            NV: {c.nguoi_phu_trach || 'CHƯA GIAO'}
                           </span>
                         </div>
                         
@@ -979,7 +979,7 @@ export default function PhanCongDashboard() {
                         )}
 
                         {/* Nút Giao việc cho thợ (Hiện ở cả 2 tab) */}
-                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">Giao thợ:</span>
+                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">Giao Nv:</span>
                         {danhSachTho.map(tho => (
                           <button
                             key={tho.id}
