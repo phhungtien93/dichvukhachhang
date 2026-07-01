@@ -640,7 +640,20 @@ export default function PhanCongDashboard() {
             </div>
 
             {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN ================= */}
-            {danhSachTienDoTho.length > 0 && (
+            {loading ? (
+              /* Hiệu ứng Skeleton Loading lúc đang tải dữ liệu */
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-2 shrink-0 animate-pulse">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                  <div className="h-4 bg-slate-200 rounded-full w-12"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
+                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
+                  <div className="h-10 bg-slate-100 rounded-lg w-full opacity-50"></div>
+                </div>
+              </div>
+            ) : danhSachTienDoTho.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
                 
                 {/* Header chuyển thành nút bấm đóng/mở */}
@@ -884,7 +897,16 @@ export default function PhanCongDashboard() {
         {/* ================= KẾT THÚC KHU VỰC TỔNG QUAN ================= */}
 
         {/* ================= BẮT ĐẦU KHỐI TỒN ĐỌNG NGÀY HÔM QUA ================= */}
-        {(tonDongHenLai.length > 0 || tonDongChuaLam.length > 0) && (
+        {loading ? (
+          /* Hiệu ứng Skeleton Loading lúc đang tải dữ liệu Tồn Đọng */
+          <div className="bg-white rounded-xl shadow-sm border-2 border-dashed border-slate-200 p-3 mb-3 shrink-0 animate-pulse">
+            <div className="h-4 bg-slate-200 rounded w-2/3 mb-3"></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-14 bg-slate-100 rounded-xl flex-1"></div>
+              <div className="h-14 bg-slate-100 rounded-xl flex-1"></div>
+            </div>
+          </div>
+        ) : (tonDongHenLai.length > 0 || tonDongChuaLam.length > 0) && (
           <div className="bg-white rounded-xl shadow-sm border-2 border-dashed border-rose-200 overflow-hidden mb-3 fade-in shrink-0">
             <button
               onClick={() => setIsBacklogExpanded(!isBacklogExpanded)}
