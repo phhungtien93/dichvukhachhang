@@ -29,6 +29,9 @@ export default function PhanCongDashboard() {
   const [mainTab, setMainTab] = useState('phan_cong'); // Điều khiển màn hình: 'phan_cong' hoặc 'lich_su'
   const [searchQuery, setSearchQuery] = useState('');
   const [historyResults, setHistoryResults] = useState([]);
+  
+  // BIẾN MỚI: DÀNH CHO Ô TRA CỨU NHANH TRỰC TIẾP
+  const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -249,6 +252,15 @@ export default function PhanCongDashboard() {
       ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') 
       : c.trang_thai_hien_tai === overviewTab
   );
+
+  // === THUẬT TOÁN TRA CỨU NHANH (LIVE SEARCH) ===
+  const quickSearchResults = quickSearchQuery.trim() === '' 
+    ? [] 
+    : caHomNay.filter(c => 
+        (c.ma_pe && c.ma_pe.toLowerCase().includes(quickSearchQuery.toLowerCase())) ||
+        (c.ten_kh && c.ten_kh.toLowerCase().includes(quickSearchQuery.toLowerCase())) ||
+        (c.so_dien_thoai && c.so_dien_thoai.includes(quickSearchQuery))
+      ).slice(0, 5); // Chỉ lấy 5 kết quả đầu tiên để chống tràn màn hình
 
   // 3. Phân loại Giỏ Việc Thợ (Đẩy 'loi_dong_bo_kd' vào list hoàn thành để biến mất khỏi app Thợ)
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
@@ -524,6 +536,71 @@ export default function PhanCongDashboard() {
         {/* NẾU ĐANG Ở TAB ĐIỀU PHỐI -> HIỂN THỊ LUỒNG LÀM VIỆC CHÍNH */}
         {mainTab === 'phan_cong' && (
           <div className="fade-in space-y-3">
+            
+            {/* === Ô TRA CỨU NHANH (LIVE SEARCH) ĐẶT TRÊN CÙNG === */}
+            <div className="relative z-30">
+              <div className="relative flex items-center">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-500">
+                  <i className="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <input
+                  type="text"
+                  value={quickSearchQuery}
+                  onChange={(e) => setQuickSearchQuery(e.target.value)}
+                  placeholder="Tra cứu nhanh mã PE, Tên KH, SĐT hôm nay..."
+                  className="w-full pl-9 pr-10 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-semibold text-slate-700 placeholder-blue-400/70"
+                />
+                {quickSearchQuery && (
+                  <button onClick={() => setQuickSearchQuery('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 active:scale-95">
+                    <i className="fa-solid fa-circle-xmark text-lg"></i>
+                  </button>
+                )}
+              </div>
+
+              {/* KHUNG POPUP HIỂN THỊ KẾT QUẢ TÌM KIẾM */}
+              {quickSearchQuery.trim() !== '' && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden fade-in">
+                  <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Kết quả theo dõi hôm nay</span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto p-1.5 space-y-1.5">
+                    {quickSearchResults.length === 0 ? (
+                      <div className="p-4 text-center text-slate-400 text-xs italic">Không tìm thấy ca nào khớp trong ngày hôm nay!</div>
+                    ) : (
+                      quickSearchResults.map(ca => (
+                        <div key={ca.id} className="p-2.5 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
+                          <div className="flex justify-between items-start mb-1.5">
+                            <div className="font-bold text-slate-800 text-[11px] truncate pr-2">{ca.ten_kh}</div>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase tracking-wider shrink-0 ${
+                              ca.trang_thai_hien_tai === 'da_thu' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              ca.trang_thai_hien_tai === 'da_chuyen_cat_dien' ? 'bg-red-50 text-red-700 border-red-200' :
+                              ca.trang_thai_hien_tai === 'da_chuyen_xac_minh' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              ca.trang_thai_hien_tai === 'chua_xu_ly' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                              {ca.trang_thai_hien_tai === 'da_thu' ? 'Đã thu' :
+                               ca.trang_thai_hien_tai === 'da_chuyen_cat_dien' ? 'Đã cắt' :
+                               ca.trang_thai_hien_tai === 'da_chuyen_xac_minh' ? 'Đợi XM' :
+                               ca.trang_thai_hien_tai === 'chua_xu_ly' ? 'Chưa làm' : 'Khác'}
+                            </span>
+                          </div>
+                          <div className="flex gap-2 items-center text-[10px]">
+                            <span className="font-mono font-bold text-blue-600">{ca.ma_pe}</span>
+                            <span className="text-slate-300">|</span>
+                            {/* Dòng hiển thị TÊN THỢ PHỤ TRÁCH */}
+                            <span className={`font-bold ${ca.nguoi_phu_trach ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              <i className={`fa-solid ${ca.nguoi_phu_trach ? 'fa-hard-hat' : 'fa-box-open'} mr-1`}></i> 
+                              {ca.nguoi_phu_trach ? `Thợ: ${ca.nguoi_phu_trach}` : 'Đang trong kho (Chưa giao)'}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* ================= BẮT ĐẦU KHU VỰC TỔNG QUAN ================= */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
           <button
