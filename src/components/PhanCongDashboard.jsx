@@ -209,7 +209,36 @@ export default function PhanCongDashboard() {
 
         if (danhSachNhap.length === 0) return toast.error('File Excel trống!');
 
-        const toastId = toast.loading(`Đang nạp ${danhSachNhap.length} hồ sơ...`);
+        // === TRẠM KIỂM SOÁT TỒN ĐỌNG: CHẶN TRÙNG LẶP MÃ PE ===
+        const mốcNửaĐêm = new Date();
+        mốcNửaĐêm.setHours(0, 0, 0, 0);
+
+        // Lọc nhanh danh sách các mã PE đang bị kẹt ở trạng thái tồn đọng cũ (Chưa xử lý, Hẹn lại, Đã báo hẹn)
+        const cacMaPETonDong = danhSach
+          .filter(c => new Date(c.ngay_nap_du_lieu) < mốcNửaĐêm && ['chua_xu_ly', 'hen_lai', 'da_bao_hen'].includes(c.trang_thai_hien_tai))
+          .map(c => c.ma_pe.toUpperCase().trim());
+
+        // Đối chiếu danh sách Excel mới xem có ông nào dính vào kho tồn đọng không
+        const danhSachMaTrùng = danhSachNhap
+          .filter(item => cacMaPETonDong.includes(item.ma_pe.toUpperCase().trim()))
+          .map(item => item.ma_pe);
+
+        // Nếu phát hiện dù chỉ 1 mã trùng -> Từ chối và hủy bỏ lệnh nạp toàn bộ file ngay lập tức
+        if (danhSachMaTrùng.length > 0) {
+          const maTrùngDuyNhất = [...new Set(danhSachMaTrùng)]; // Loại bỏ trùng lặp trong câu thông báo
+          
+          toast.error(
+            `NẠP FILE THẤT BẠI! Phát hiện ${maTrùngDuyNhất.length} mã PE đang tồn đọng chưa xử lý xong từ hôm qua. Vui lòng kiểm tra lại các mã: ${maTrùngDuyNhất.join(', ')}`,
+            { duration: 8000, style: { border: '1px solid #f5c6cb', padding: '12px', color: '#721c24' } }
+          );
+          
+          setLoading(false);
+          e.target.value = ''; // Giải phóng input file
+          return; // Ngắt luồng, tuyệt đối không chèn vào Database
+        }
+
+        // ĐỦ ĐIỀU KIỆN SẠCH -> TIẾN HÀNH NẠP FILE
+        const toastId = toast.loading(`Đóng điện hệ thống, đang nạp ${danhSachNhap.length} hồ sơ...`);
         const { error } = await supabase.from('danh_sach_doc_thu').insert(danhSachNhap);
         if (error) throw error;
 
