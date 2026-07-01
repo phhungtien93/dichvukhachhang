@@ -5,6 +5,7 @@ import PhanCongDashboard from './components/PhanCongDashboard';
 import GiaoDienTho from './components/GiaoDienTho';
 import { Toaster } from 'react-hot-toast';
 import { supabase } from './supabase';
+import Auth from './components/Auth';
 
 function App() {
   const [activeTab, setActiveTab] = useState('danhsach'); 
