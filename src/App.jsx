@@ -150,9 +150,30 @@ function App() {
     );
   }
 
+  // BIẾN GỘP: Kiểm tra xem user có ít nhất 1 quyền nào không?
+  const hasAnyPermission = canPhanCong || canNhanViec || canDieuHanh || canThongKe;
+
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       <div className="flex-1 overflow-y-auto pb-28 w-full h-full relative">
+        
+        {/* NẾU TÀI KHOẢN TRẮNG QUYỀN -> HIỆN MÀN HÌNH CHẶN VÀ NÚT THOÁT */}
+        {!hasAnyPermission && (
+          <div className="flex flex-col items-center justify-center h-full p-6 text-center fade-in">
+            <i className="fa-solid fa-lock text-6xl text-slate-300 mb-4"></i>
+            <h2 className="text-xl font-black text-slate-700 mb-2 uppercase">CHƯA ĐƯỢC CẤP QUYỀN</h2>
+            <p className="text-sm text-slate-500 mb-8">
+              Tài khoản này chưa được gán vào bất kỳ phân hệ nào. Vui lòng liên hệ Quản trị viên để thiết lập quyền truy cập.
+            </p>
+            <button 
+              onClick={() => supabase.auth.signOut()} 
+              className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold py-3 px-8 rounded-xl shadow-sm active:scale-95 transition-all flex items-center"
+            >
+              <i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> THOÁT TÀI KHOẢN NÀY
+            </button>
+          </div>
+        )}
+
         {/* Chỉ truyền Component khi có quyền, tránh render trộm */}
         {activeTab === 'phancong' && canPhanCong && <PhanCongDashboard session={session} profile={profile} />}
         {activeTab === 'nhanviec' && canNhanViec && <GiaoDienTho session={session} profile={profile} />}
