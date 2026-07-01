@@ -3,7 +3,7 @@ import QuanLyDanhSach from './components/QuanLyDanhSach';
 import ThongKeDashboard from './components/ThongKeDashboard';
 import PhanCongDashboard from './components/PhanCongDashboard';
 import GiaoDienTho from './components/GiaoDienTho';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { supabase } from './supabase';
 
 function App() {
