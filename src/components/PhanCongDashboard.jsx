@@ -1201,6 +1201,7 @@ export default function PhanCongDashboard() {
           </div>
         )}
       </div>
+      )} {/* <--- BỔ SUNG CẶP DẤU NÀY ĐỂ ĐÓNG LOGIC GIỎ HÀNG */}
 
       {/* ================= POPUP CHI TIẾT TIẾN ĐỘ CÁ NHÂN ================= */}
       {selectedWorkerProgress && (
