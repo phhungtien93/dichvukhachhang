@@ -653,7 +653,7 @@ export default function PhanCongDashboard() {
                   </h3>
                   <div className="flex items-center gap-3">
                     <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
-                      {danhSachTienDoTho.length} Nhân viên
+                      {danhSachTienDoTho.length} NV
                     </span>
                     <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
                   </div>
