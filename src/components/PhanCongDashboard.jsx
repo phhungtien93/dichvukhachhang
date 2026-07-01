@@ -410,7 +410,7 @@ export default function PhanCongDashboard() {
   // BỔ SUNG LỆNH RETURN BỊ THIẾU Ở ĐÂY
   return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in">
-      <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
+      <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
         <div>
           <h2 className="font-black text-lg text-slate-800 tracking-tight">ĐIỀU PHỐI <span className="text-blue-600">ĐỐC THU</span></h2>
           <p className="text-[10px] text-slate-500 font-bold uppercase">Tổng: {caChuaGiao.length} ca chưa phân công</p>
@@ -538,7 +538,7 @@ export default function PhanCongDashboard() {
           <div className="fade-in space-y-3">
             
             {/* === Ô TRA CỨU NHANH (LIVE SEARCH) ĐẶT TRÊN CÙNG === */}
-            <div className="relative z-30">
+            <div className="relative z-10">
               <div className="relative flex items-center">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-500">
                   <i className="fa-solid fa-magnifying-glass"></i>
@@ -1035,7 +1035,7 @@ export default function PhanCongDashboard() {
 
       {/* GIỎ HÀNG THỢ (Ẩn đi nếu đang xem Lịch sử để tối ưu không gian màn hình) */}
       {mainTab === 'phan_cong' && (
-        <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-20 transition-all duration-300 relative shrink-0">
+        <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-40 transition-all duration-300 relative shrink-0">
         <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-2"></div>
         <div className="px-4 pb-2">
           <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center justify-between mb-3">
