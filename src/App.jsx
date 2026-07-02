@@ -34,10 +34,21 @@ const [isProfileLoaded, setIsProfileLoaded] = useState(false);
 }, []);
 
   const fetchProfile = async (userId) => {
-    const { data } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
-    setProfile(data);
-    setIsProfileLoaded(true);
-  };
+  const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+  
+  // Nếu bị lỗi hoặc chưa có data -> thử lại 1 lần nữa sau 500ms, KHÔNG vội kết luận "hết quyền"
+  if (error || !data) {
+    setTimeout(async () => {
+      const retry = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+      setProfile(retry.data || null);
+      setIsProfileLoaded(true);
+    }, 500);
+    return;
+  }
+
+  setProfile(data);
+  setIsProfileLoaded(true);
+};
 
   // LOGIC ĐIỀU HƯỚNG TỰ ĐỘNG: Đá user về đúng màn hình họ có quyền
   useEffect(() => {
