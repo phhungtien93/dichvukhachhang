@@ -24,65 +24,7 @@ export default function PhanCongDashboard() {
   const [isProgressExpanded, setIsProgressExpanded] = useState(false); // STATE MỚI CHO TIẾN ĐỘ CÁ NHÂN
   const [overviewTab, setOverviewTab] = useState('hen_lai'); // 'hen_lai' hoặc 'da_thu'
   const [isBacklogExpanded, setIsBacklogExpanded] = useState(false);
-  const [backlogTab, setBacklogTab] = useState('hen_lai'); // 'hen_lai' hoặc 'chua_xu_ly'
-
-  // === CHẾ ĐỘ PHÂN CÔNG KÉP (CÁ NHÂN / THEO NHÓM) ===
-  const [assignMode, setAssignMode] = useState('ca_nhan'); // 'ca_nhan' hoặc 'theo_nhom'
-  const [danhSachNhom, setDanhSachNhom] = useState([]); // Lưu trữ các nhóm tạo tạm trên RAM
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false); // Bật/tắt popup tạo nhóm
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupMembers, setNewGroupMembers] = useState([]);
-
-  // HÀM: Tạo Nhóm Tạm Thời
-  const handleCreateGroup = (e) => {
-    e.preventDefault();
-    if (!newGroupName.trim()) return toast.error('Vui lòng nhập tên nhóm!');
-    if (newGroupMembers.length === 0) return toast.error('Vui lòng chọn ít nhất 1 thành viên!');
-    
-    const newGroup = {
-      id: 'NHOM_' + Date.now(),
-      ten_nhom: newGroupName.trim(),
-      thanh_vien: newGroupMembers // Mảng chứa ID của các nhân viên
-    };
-    setDanhSachNhom([...danhSachNhom, newGroup]);
-    setIsCreatingGroup(false);
-    setNewGroupName('');
-    setNewGroupMembers([]);
-    toast.success(`Đã tạo ${newGroup.ten_nhom} thành công!`);
-  };
-
-  // HÀM: Đẩy ca vào Giỏ Nhóm
-  const handleGiaoCaChoNhom = async (danhSachCa, nhomObj) => {
-    const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Đang giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
-
-    try {
-      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
-      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
-      const chuoiThanhVien = nhomObj.thanh_vien.join(','); // Biến mảng ['id1', 'id2'] thành chuỗi "id1,id2"
-
-      // Khối lệnh dùng chung cho Cập nhật DB
-      const payloadBase = {
-        ten_nhom_phu_trach: nhomObj.ten_nhom,
-        ds_id_thanh_vien_nhom: chuoiThanhVien,
-        tho_id: null,           // Xóa rỗng phân công cá nhân (nếu có)
-        nguoi_phu_trach: null,  // Xóa rỗng phân công cá nhân (nếu có)
-        ngay_nap_du_lieu: isoNow
-      };
-
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
-      }
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
-
-      toast.success(`Giao việc cho Nhóm thành công!`, { id: toastId });
-      fetchAllData(); // Tải lại toàn bộ dữ liệu để app đồng bộ trạng thái
-    } catch (error) {
-      toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
-    }
-  };
+  const [backlogTab, setBacklogTab] = useState('hen_lai'); // 'hen_lai' hoặc 'chua_xu_ly
 
   // === STATE CHO TAB LỊCH SỬ ===
   const [mainTab, setMainTab] = useState('phan_cong'); // Điều khiển màn hình: 'phan_cong' hoặc 'lich_su'
@@ -96,6 +38,101 @@ export default function PhanCongDashboard() {
   const [selectedWorkerProgress, setSelectedWorkerProgress] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // === CHẾ ĐỘ PHÂN CÔNG KÉP (CÁ NHÂN / THEO NHÓM) ===
+  const [assignMode, setAssignMode] = useState('ca_nhan'); 
+  const [danhSachNhom, setDanhSachNhom] = useState([]); 
+  const [activeGroupCart, setActiveGroupCart] = useState(null); // Quản lý giỏ đang mở của nhóm
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false); 
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState([]);
+
+  // HÀM: Tạo Nhóm lưu thẳng vào Supabase
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) return toast.error('Vui lòng nhập tên nhóm!');
+    if (newGroupMembers.length === 0) return toast.error('Vui lòng chọn ít nhất 1 thành viên!');
+    
+    const toastId = toast.loading('Đang khởi tạo nhóm...');
+    try {
+      const { error } = await supabase.from('danh_sach_nhom').insert([{
+        ten_nhom: newGroupName.trim(),
+        thanh_vien_ids: newGroupMembers.join(',') // Lưu mảng dạng chuỗi "id1,id2"
+      }]);
+      if (error) throw error;
+      
+      toast.success('Tạo nhóm thành công!', { id: toastId });
+      setIsCreatingGroup(false);
+      setNewGroupName('');
+      setNewGroupMembers([]);
+      fetchAllData(); // Tải lại để lấy nhóm vừa tạo
+    } catch (error) {
+      toast.error('Lỗi khởi tạo nhóm!', { id: toastId });
+    }
+  };
+
+  // HÀM: Giao ca vào Giỏ Nhóm
+  const handleGiaoCaChoNhom = async (danhSachCa, nhomObj) => {
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
+
+    try {
+      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
+      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+
+      const payloadBase = {
+        ten_nhom_phu_trach: nhomObj.ten_nhom,
+        ds_id_thanh_vien_nhom: nhomObj.thanh_vien_ids,
+        tho_id: null,           // Xóa dấu vết cá nhân
+        nguoi_phu_trach: null,  // Xóa dấu vết cá nhân
+        ngay_nap_du_lieu: isoNow
+      };
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
+      toast.success(`Xong!`, { id: toastId });
+      fetchAllData(); 
+    } catch (error) {
+      toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
+    }
+  };
+
+  // HÀM: Chuyển ca lẻ giữa các Nhóm
+  const handleChuyenGiaoCaLeNhom = async (nhomNhanObj) => {
+    if (selectedMicroTasks.length === 0) return;
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Chuyển ca sang ${nhomNhanObj.ten_nhom}...`);
+    
+    try {
+      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+
+      const payloadBase = {
+        ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
+        ds_id_thanh_vien_nhom: nhomNhanObj.thanh_vien_ids,
+        tho_id: null,
+        nguoi_phu_trach: null,
+        ngay_nap_du_lieu: isoNow
+      };
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
+      
+      setSelectedMicroTasks([]);
+      fetchAllData();
+      toast.success(`Thành công!`, { id: toastId });
+    } catch (error) {
+      toast.error('Lỗi điều chuyển nhóm', { id: toastId });
+    }
+  };
 
   // === HÀM TÌM KIẾM LỊCH SỬ TỪ BẢNG LẠNH ===
   const handleSearchHistory = async (e) => {
@@ -134,6 +171,10 @@ export default function PhanCongDashboard() {
       // Tải danh sách nhân viên thực tế (Chỉ lấy Role là user/thợ)
       const { data: userData } = await supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
       setDanhSachTho(userData || []);
+
+      // BẢNG DỮ LIỆU NHÓM (Chỉ chứa dữ liệu hôm nay vì đã có pg_cron dọn dẹp)
+      const { data: nhomData } = await supabase.from('danh_sach_nhom').select('*').order('created_at');
+      setDanhSachNhom(nhomData || []);
 
       const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
       setDanhMucTram(tramData || []);
@@ -383,10 +424,14 @@ export default function PhanCongDashboard() {
   // Chỉ lấy những thợ có được phân việc và xếp người nhiều việc nhất lên đầu
   const danhSachTienDoTho = Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
 
-  // 3. Phân loại Giỏ Việc Thợ (Đẩy 'loi_dong_bo_kd' vào list hoàn thành để biến mất khỏi app Thợ)
+  // 3. Phân loại Giỏ Việc (Tách biệt Cá nhân và Nhóm)
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
-  const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  const caDaGiao = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+  
+  // Ca Chưa Giao: Bắt buộc phải trống cả tên Nhân viên LẪN tên Nhóm
+  const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+  
+  const caDaGiaoCaNhan = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+  const caDaGiaoNhom = caHomNay.filter(c => c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
   const khoViec = {};
   caChuaGiao.forEach(c => {
@@ -397,13 +442,22 @@ export default function PhanCongDashboard() {
     khoViec[soGCS][nhom].push(c);
   });
 
+  // Tái tạo Giỏ Cá Nhân
   const gioViec = {};
-  // Nhóm giỏ việc theo UUID của thợ thay vì tên
   danhSachTho.forEach(tho => gioViec[tho.id] = []);
-  caDaGiao.forEach(c => {
-    const key = c.tho_id || c.nguoi_phu_trach; // Tương thích ngược với ca cũ chưa có UUID
+  caDaGiaoCaNhan.forEach(c => {
+    const key = c.tho_id || c.nguoi_phu_trach; 
     if (!gioViec[key]) gioViec[key] = [];
     gioViec[key].push(c);
+  });
+
+  // Tái tạo Giỏ Nhóm
+  const gioViecNhom = {};
+  danhSachNhom.forEach(nhom => gioViecNhom[nhom.ten_nhom] = []);
+  caDaGiaoNhom.forEach(c => {
+    const key = c.ten_nhom_phu_trach;
+    if (!gioViecNhom[key]) gioViecNhom[key] = [];
+    gioViecNhom[key].push(c);
   });
 
   // 4. CHỨC NĂNG CHIA CA (Nhận truyền vào là Object Thợ thay vì tên)
@@ -533,16 +587,16 @@ export default function PhanCongDashboard() {
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in relative">
       <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
         <div className="flex flex-col gap-1.5">
-          {/* CÔNG TẮC CHUYỂN ĐỔI CHẾ ĐỘ PHÂN CÔNG */}
+          {/* CÔNG TẮC CHUYỂN ĐỔI NHƯ MỘT TAB CHÍNH */}
           <div className="flex bg-slate-100 p-0.5 rounded-lg w-max shadow-inner border border-slate-200">
             <button 
-              onClick={() => setAssignMode('ca_nhan')}
+              onClick={() => { setAssignMode('ca_nhan'); setActiveGroupCart(null); setSelectedMicroTasks([]); }}
               className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${assignMode === 'ca_nhan' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Cá nhân
             </button>
             <button 
-              onClick={() => setAssignMode('theo_nhom')}
+              onClick={() => { setAssignMode('theo_nhom'); setActiveWorkerCart(null); setSelectedMicroTasks([]); }}
               className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${assignMode === 'theo_nhom' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Theo Nhóm
@@ -1099,9 +1153,8 @@ export default function PhanCongDashboard() {
                           </>
                         )}
 
-                        {/* Nút Giao việc (Đổi logic theo chế độ CÁ NHÂN hay NHÓM) */}
+                        {/* RẼ NHÁNH IF: NÚT GIAO VIỆC */}
                         <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">{assignMode === 'ca_nhan' ? 'Giao Nv:' : 'Giao Nhóm:'}</span>
-                        
                         {assignMode === 'ca_nhan' ? (
                           danhSachTho.map(tho => (
                             <button
@@ -1235,14 +1288,13 @@ export default function PhanCongDashboard() {
                         </div>
                       )}
                       
-                      {/* CÁC NÚT ĐẨY VÀO GIỎ */}
+                      {/* RẼ NHÁNH IF: CÁC NÚT ĐẨY VÀO GIỎ KHO VIỆC */}
                       <div className={`flex flex-wrap gap-1.5 border-t pt-2 mt-1 ${isTram ? 'border-amber-100' : 'border-blue-100'}`}>
                         <div className="flex justify-between items-center w-full mb-0.5">
                           <span className="text-[9px] text-slate-400 font-bold uppercase">Đẩy nhanh vào giỏ:</span>
-                          {/* Nút Tạo Nhóm Nhanh hiển thị khi bật Mode Nhóm */}
                           {assignMode === 'theo_nhom' && (
                             <button onClick={() => setIsCreatingGroup(true)} className="text-[9px] font-black text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-full transition-colors active:scale-95">
-                              + Tạo Tổ/Nhóm
+                              + Tạo Nhóm
                             </button>
                           )}
                         </div>
@@ -1266,7 +1318,7 @@ export default function PhanCongDashboard() {
                                 onClick={() => handleGiaoCaChoNhom(danhSachCa, nhom)}
                                 className="bg-white border border-purple-200 hover:border-purple-600 hover:bg-purple-600 hover:text-white active:scale-95 px-2 py-1.5 rounded shadow-sm text-[10px] font-bold text-purple-700 transition-all flex items-center gap-1 flex-1 justify-center"
                               >
-                                <i className="fa-solid fa-users"></i> {nhom.ten_nhom}
+                                <i className="fa-solid fa-users"></i> {nhom.ten_nhom} <span className="bg-white/20 px-1 rounded text-[8px] ml-1">{gioViecNhom[nhom.ten_nhom]?.length || 0}</span>
                               </button>
                             ))}
                           </>
@@ -1283,105 +1335,227 @@ export default function PhanCongDashboard() {
         )}
       </div>
 
-      {/* GIỎ HÀNG THỢ (Ẩn đi nếu đang xem Lịch sử để tối ưu không gian màn hình) */}
+      {/* KHU VỰC GIỎ HÀNG (ĐƯỢC BỌC TRONG IF/ELSE KHỔNG LỒ NHƯ THẢO LUẬN) */}
       {mainTab === 'phan_cong' && (
         <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-40 transition-all duration-300 relative shrink-0">
-        <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-2"></div>
-        <div className="px-4 pb-2">
-          <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center justify-between mb-3">
-            <span><i className="fa-solid fa-users text-blue-600 mr-1"></i> Giỏ Việc Nhân Viên</span>
-            <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-[9px]">{caDaGiao.length} Đã giao</span>
-          </h3>
+          <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-2"></div>
           
-          <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto no-scrollbar pb-4">
-            {danhSachTho.map(tho => {
-              const soCa = gioViec[tho.id]?.length || 0;
-              const isActive = activeWorkerCart === tho.id;
-              return (
-                <div 
-                  key={tho.id} 
-                  onClick={() => setActiveWorkerCart(isActive ? null : tho.id)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-blue-600 border-blue-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-blue-50 border-blue-200 hover:border-blue-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
-                >
-                  <div className="flex justify-between items-start">
-                    <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{tho.ho_ten}</span>
-                    <i className={`fa-solid fa-basket-shopping ${isActive ? 'text-blue-300' : soCa > 0 ? 'text-blue-400' : 'text-slate-300'}`}></i>
-                  </div>
-                  <div className={`mt-2 font-mono font-black text-xl ${isActive ? 'text-white' : soCa > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
-                    {soCa} <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">Ca</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {activeWorkerCart && (
-          <div className="absolute bottom-[100%] left-0 w-full bg-slate-100 border-t border-slate-300 shadow-2xl h-[50vh] flex flex-col z-30 slide-up rounded-t-xl">
-            <div className="bg-blue-700 p-3 flex justify-between items-center text-white rounded-t-xl shrink-0">
-              <h4 className="font-bold text-sm uppercase">Giỏ của {danhSachTho.find(t => t.id === activeWorkerCart)?.ho_ten} ({gioViec[activeWorkerCart]?.length} ca)</h4>
-              <button onClick={() => { setActiveWorkerCart(null); setSelectedMicroTasks([]); }} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            
-            {/* ... [GIỮ NGUYÊN KHÚC RENDER MICRO TASKS Ở GIỮA] ... */}
-            <div className="p-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold text-center border-b border-yellow-200">
-              <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca lẻ để điều chuyển
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
-              {gioViec[activeWorkerCart]?.length === 0 ? (
-                <p className="text-center text-slate-400 text-xs mt-10 italic">Giỏ hàng trống.</p>
-              ) : (
-                [...gioViec[activeWorkerCart]].sort((a,b) => a.nhom_phan_cong.localeCompare(b.nhom_phan_cong)).map(c => (
-                  <div 
-                    key={c.id} 
-                    onClick={() => toggleMicroTask(c.id)}
-                    className={`flex items-center p-2 bg-white rounded-lg border cursor-pointer transition-colors ${selectedMicroTasks.includes(c.id) ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <div className="mr-3 ml-1 text-lg">
-                      <i className={`fa-regular ${selectedMicroTasks.includes(c.id) ? 'fa-square-check text-blue-600' : 'fa-square text-slate-300'}`}></i>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between mb-0.5">
-                        <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[120px]" title={c.ma_tru_sach}>
-                          <i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}
-                        </span>
-                        <span className="font-mono font-bold text-[10px] text-blue-700 bg-blue-50 px-1 rounded">{c.ma_pe}</span>
+          {assignMode === 'ca_nhan' ? (
+            // ================== BỘ GIAO DIỆN 1: GIỎ CÁ NHÂN ==================
+            <>
+              <div className="px-4 pb-2">
+                <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center justify-between mb-3">
+                  <span><i className="fa-solid fa-users text-blue-600 mr-1"></i> Giỏ Cá Nhân</span>
+                  <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-[9px]">{caDaGiaoCaNhan.length} Đã giao</span>
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto no-scrollbar pb-4">
+                  {danhSachTho.map(tho => {
+                    const soCa = gioViec[tho.id]?.length || 0;
+                    const isActive = activeWorkerCart === tho.id;
+                    return (
+                      <div 
+                        key={tho.id} 
+                        onClick={() => setActiveWorkerCart(isActive ? null : tho.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-blue-600 border-blue-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-blue-50 border-blue-200 hover:border-blue-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{tho.ho_ten}</span>
+                          <i className={`fa-solid fa-basket-shopping ${isActive ? 'text-blue-300' : soCa > 0 ? 'text-blue-400' : 'text-slate-300'}`}></i>
+                        </div>
+                        <div className={`mt-2 font-mono font-black text-xl ${isActive ? 'text-white' : soCa > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
+                          {soCa} <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">Ca</span>
+                        </div>
                       </div>
-                      <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Sổ: {c.so_gcs} | {c.nhom_phan_cong}</p>
-                      <p className="text-[11px] font-black text-red-500 mt-0.5">
-                        <i className="fa-solid fa-money-bill-wave mr-1"></i> 
-                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(c.so_tien || 0)}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {selectedMicroTasks.length > 0 && (
-              <div className="bg-white border-t border-slate-200 p-3 shrink-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] slide-up">
-                <div className="text-[10px] font-bold text-slate-500 mb-2 text-center uppercase tracking-wider">
-                  Chuyển {selectedMicroTasks.length} ca sang:
-                </div>
-                <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
-                  {danhSachTho.filter(t => t.id !== activeWorkerCart).map(thoNhan => (
-                    <button 
-                      key={thoNhan.id}
-                      onClick={() => handleChuyenGiaoCaLe(thoNhan)}
-                      className="shrink-0 bg-blue-100 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 px-4 py-2 rounded-lg font-bold text-xs transition-colors flex items-center gap-1"
-                    >
-                      {thoNhan.ho_ten}
-                    </button>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
-            )}
+
+              {activeWorkerCart && (
+                <div className="absolute bottom-[100%] left-0 w-full bg-slate-100 border-t border-slate-300 shadow-2xl h-[50vh] flex flex-col z-30 slide-up rounded-t-xl">
+                  <div className="bg-blue-700 p-3 flex justify-between items-center text-white rounded-t-xl shrink-0">
+                    <h4 className="font-bold text-sm uppercase">Giỏ của {danhSachTho.find(t => t.id === activeWorkerCart)?.ho_ten} ({gioViec[activeWorkerCart]?.length} ca)</h4>
+                    <button onClick={() => { setActiveWorkerCart(null); setSelectedMicroTasks([]); }} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+                  </div>
+                  
+                  <div className="p-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold text-center border-b border-yellow-200">
+                    <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca lẻ để điều chuyển
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
+                    {gioViec[activeWorkerCart]?.length === 0 ? (
+                      <p className="text-center text-slate-400 text-xs mt-10 italic">Giỏ hàng trống.</p>
+                    ) : (
+                      [...gioViec[activeWorkerCart]].sort((a,b) => a.nhom_phan_cong.localeCompare(b.nhom_phan_cong)).map(c => (
+                        <div key={c.id} onClick={() => toggleMicroTask(c.id)} className={`flex items-center p-2 bg-white rounded-lg border cursor-pointer transition-colors ${selectedMicroTasks.includes(c.id) ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'}`}>
+                          <div className="mr-3 ml-1 text-lg"><i className={`fa-regular ${selectedMicroTasks.includes(c.id) ? 'fa-square-check text-blue-600' : 'fa-square text-slate-300'}`}></i></div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between mb-0.5">
+                              <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[120px]"><i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}</span>
+                              <span className="font-mono font-bold text-[10px] text-blue-700 bg-blue-50 px-1 rounded">{c.ma_pe}</span>
+                            </div>
+                            <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
+                            <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Sổ: {c.so_gcs} | {c.nhom_phan_cong}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {selectedMicroTasks.length > 0 && (
+                    <div className="bg-white border-t border-slate-200 p-3 shrink-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] slide-up">
+                      <div className="text-[10px] font-bold text-slate-500 mb-2 text-center uppercase tracking-wider">Chuyển {selectedMicroTasks.length} ca sang:</div>
+                      <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
+                        {danhSachTho.filter(t => t.id !== activeWorkerCart).map(thoNhan => (
+                          <button key={thoNhan.id} onClick={() => handleChuyenGiaoCaLe(thoNhan)} className="shrink-0 bg-blue-100 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 px-4 py-2 rounded-lg font-bold text-xs transition-colors">
+                            {thoNhan.ho_ten}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            // ================== BỘ GIAO DIỆN 2: GIỎ NHÓM (Bản copy độc lập) ==================
+            <>
+              <div className="px-4 pb-2">
+                <h3 className="text-xs font-bold text-purple-800 uppercase flex items-center justify-between mb-3">
+                  <span><i className="fa-solid fa-people-group text-purple-600 mr-1"></i> Giỏ Của Nhóm</span>
+                  <span className="bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full text-[9px]">{caDaGiaoNhom.length} Đã giao</span>
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto no-scrollbar pb-4">
+                  {danhSachNhom.length === 0 ? (
+                    <div className="col-span-2 text-center text-slate-400 text-[10px] italic py-4">Chưa có nhóm nào được lập hôm nay!</div>
+                  ) : danhSachNhom.map(nhom => {
+                    const soCa = gioViecNhom[nhom.ten_nhom]?.length || 0;
+                    const isActive = activeGroupCart === nhom.id;
+                    return (
+                      <div 
+                        key={nhom.id} 
+                        onClick={() => setActiveGroupCart(isActive ? null : nhom.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-purple-600 border-purple-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-purple-50 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{nhom.ten_nhom}</span>
+                          <i className={`fa-solid fa-basket-shopping ${isActive ? 'text-purple-300' : soCa > 0 ? 'text-purple-400' : 'text-slate-300'}`}></i>
+                        </div>
+                        <div className={`mt-2 font-mono font-black text-xl ${isActive ? 'text-white' : soCa > 0 ? 'text-purple-700' : 'text-slate-400'}`}>
+                          {soCa} <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">Ca</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {activeGroupCart && (
+                <div className="absolute bottom-[100%] left-0 w-full bg-slate-100 border-t border-slate-300 shadow-2xl h-[50vh] flex flex-col z-30 slide-up rounded-t-xl">
+                  <div className="bg-purple-700 p-3 flex justify-between items-center text-white rounded-t-xl shrink-0">
+                    <h4 className="font-bold text-sm uppercase">Giỏ {danhSachNhom.find(t => t.id === activeGroupCart)?.ten_nhom} ({gioViecNhom[danhSachNhom.find(t => t.id === activeGroupCart)?.ten_nhom]?.length || 0} ca)</h4>
+                    <button onClick={() => { setActiveGroupCart(null); setSelectedMicroTasks([]); }} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+                  </div>
+                  
+                  <div className="p-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold text-center border-b border-yellow-200">
+                    <i className="fa-solid fa-circle-info mr-1"></i> Tick chọn các ca để điều chuyển sang nhóm khác
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
+                    {gioViecNhom[danhSachNhom.find(t => t.id === activeGroupCart)?.ten_nhom]?.length === 0 || !gioViecNhom[danhSachNhom.find(t => t.id === activeGroupCart)?.ten_nhom] ? (
+                      <p className="text-center text-slate-400 text-xs mt-10 italic">Nhóm chưa có việc.</p>
+                    ) : (
+                      [...gioViecNhom[danhSachNhom.find(t => t.id === activeGroupCart)?.ten_nhom]].sort((a,b) => a.nhom_phan_cong.localeCompare(b.nhom_phan_cong)).map(c => (
+                        <div key={c.id} onClick={() => toggleMicroTask(c.id)} className={`flex items-center p-2 bg-white rounded-lg border cursor-pointer transition-colors ${selectedMicroTasks.includes(c.id) ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-500' : 'border-slate-200 hover:border-slate-300'}`}>
+                          <div className="mr-3 ml-1 text-lg"><i className={`fa-regular ${selectedMicroTasks.includes(c.id) ? 'fa-square-check text-purple-600' : 'fa-square text-slate-300'}`}></i></div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between mb-0.5">
+                              <span className="font-bold text-[10px] text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[120px]"><i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}</span>
+                              <span className="font-mono font-bold text-[10px] text-purple-700 bg-purple-50 px-1 rounded">{c.ma_pe}</span>
+                            </div>
+                            <h5 className="font-bold text-xs text-slate-800 truncate">{c.ten_kh}</h5>
+                            <p className="text-[10px] text-slate-500 mt-0.5 font-medium"><i className="fa-solid fa-layer-group mr-1 text-slate-300"></i>Sổ: {c.so_gcs} | {c.nhom_phan_cong}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {selectedMicroTasks.length > 0 && (
+                    <div className="bg-white border-t border-slate-200 p-3 shrink-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] slide-up">
+                      <div className="text-[10px] font-bold text-slate-500 mb-2 text-center uppercase tracking-wider">Chuyển {selectedMicroTasks.length} ca sang:</div>
+                      <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
+                        {danhSachNhom.filter(t => t.id !== activeGroupCart).map(nhomNhan => (
+                          <button key={nhomNhan.id} onClick={() => handleChuyenGiaoCaLeNhom(nhomNhan)} className="shrink-0 bg-purple-100 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 px-4 py-2 rounded-lg font-bold text-xs transition-colors">
+                            {nhomNhan.ten_nhom}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ================= MODAL TẠO NHÓM MỚI ================= */}
+      {isCreatingGroup && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
+            <div className="p-4 border-b border-slate-100 bg-purple-50 flex justify-between items-center">
+              <h3 className="font-black text-purple-800 uppercase flex items-center gap-2 text-sm">
+                <i className="fa-solid fa-people-group"></i> Lập Nhóm Mới
+              </h3>
+              <button onClick={() => { setIsCreatingGroup(false); setNewGroupName(''); setNewGroupMembers([]); }} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateGroup} className="p-4 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tên Tổ / Nhóm</label>
+                <input 
+                  type="text" 
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="Ví dụ: Nhóm 1, Trạm A..." 
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-bold text-slate-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Chọn thành viên (Đã chọn: {newGroupMembers.length})</label>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
+                  {danhSachTho.map(tho => {
+                    const isSelected = newGroupMembers.includes(tho.id);
+                    return (
+                      <label key={tho.id} className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                          {isSelected && <i className="fa-solid fa-check text-[10px]"></i>}
+                        </div>
+                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-purple-700' : 'text-slate-600'}`}>{tho.ho_ten}</span>
+                        <input type="checkbox" className="hidden" checked={isSelected} onChange={(e) => {
+                          if (e.target.checked) setNewGroupMembers([...newGroupMembers, tho.id]);
+                          else setNewGroupMembers(newGroupMembers.filter(id => id !== tho.id));
+                        }}/>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all uppercase tracking-wider">Khởi Tạo Nhóm</button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
-      )} {/* <--- BỔ SUNG CẶP DẤU NÀY ĐỂ ĐÓNG LOGIC GIỎ HÀNG */}
+        </div>
+      )}
 
       {/* ================= POPUP CHI TIẾT TIẾN ĐỘ CÁ NHÂN ================= */}
       {selectedWorkerProgress && (
@@ -1422,70 +1596,6 @@ export default function PhanCongDashboard() {
                  <span className="text-2xl font-black text-blue-700 leading-none">{selectedWorkerProgress.chiTiet.chua_xu_ly}</span>
                </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= MODAL TẠO NHÓM MỚI ================= */}
-      {isCreatingGroup && (
-        <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
-            <div className="p-4 border-b border-slate-100 bg-purple-50 flex justify-between items-center">
-              <h3 className="font-black text-purple-800 uppercase flex items-center gap-2 text-sm">
-                <i className="fa-solid fa-people-group"></i> Lập Nhóm Mới
-              </h3>
-              <button onClick={() => { setIsCreatingGroup(false); setNewGroupName(''); setNewGroupMembers([]); }} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-            
-            <form onSubmit={handleCreateGroup} className="p-4 space-y-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tên Tổ / Nhóm</label>
-                <input 
-                  type="text" 
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="Ví dụ: Nhóm 1, Trạm A..." 
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-bold text-slate-700"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">
-                  Chọn thành viên (Đã chọn: {newGroupMembers.length})
-                </label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-                  {danhSachTho.map(tho => {
-                    const isSelected = newGroupMembers.includes(tho.id);
-                    return (
-                      <label key={tho.id} className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
-                          {isSelected && <i className="fa-solid fa-check text-[10px]"></i>}
-                        </div>
-                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-purple-700' : 'text-slate-600'}`}>{tho.ho_ten}</span>
-                        <input 
-                          type="checkbox" 
-                          className="hidden" 
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) setNewGroupMembers([...newGroupMembers, tho.id]);
-                            else setNewGroupMembers(newGroupMembers.filter(id => id !== tho.id));
-                          }}
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all uppercase tracking-wider">
-                  Khởi Tạo Nhóm
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
