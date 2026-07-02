@@ -209,18 +209,14 @@ export default function PhanCongDashboard() {
 
         if (danhSachNhap.length === 0) return toast.error('File Excel trống!');
 
-        // === TRẠM KIỂM SOÁT TỒN ĐỌNG: CHẶN TRÙNG LẶP MÃ PE ===
-        const mốcNửaĐêm = new Date();
-        mốcNửaĐêm.setHours(0, 0, 0, 0);
+        // === TRẠM KIỂM SOÁT KÉP: CHẶN TRÙNG LẶP MÃ PE TRÊN TOÀN HỆ THỐNG ===
+        
+        // Lấy TOÀN BỘ mã PE đang hoạt động trên hệ thống (Bao gồm cả tồn đọng cũ VÀ ca đã giao cho NV)
+        const cacMaPEHienTai = danhSach.map(c => c.ma_pe.toUpperCase().trim());
 
-        // Lọc nhanh danh sách các mã PE đang bị kẹt ở trạng thái tồn đọng cũ (Chưa xử lý, Hẹn lại, Đã báo hẹn)
-        const cacMaPETonDong = danhSach
-          .filter(c => new Date(c.ngay_nap_du_lieu) < mốcNửaĐêm && ['chua_xu_ly', 'hen_lai', 'da_bao_hen'].includes(c.trang_thai_hien_tai))
-          .map(c => c.ma_pe.toUpperCase().trim());
-
-        // Đối chiếu danh sách Excel mới xem có ông nào dính vào kho tồn đọng không
+        // Đối chiếu danh sách Excel mới xem có ông nào dính vào hệ thống không
         const danhSachMaTrùng = danhSachNhap
-          .filter(item => cacMaPETonDong.includes(item.ma_pe.toUpperCase().trim()))
+          .filter(item => cacMaPEHienTai.includes(item.ma_pe.toUpperCase().trim()))
           .map(item => item.ma_pe);
 
         // Nếu phát hiện dù chỉ 1 mã trùng -> Từ chối và hủy bỏ lệnh nạp toàn bộ file ngay lập tức
@@ -228,7 +224,7 @@ export default function PhanCongDashboard() {
           const maTrùngDuyNhất = [...new Set(danhSachMaTrùng)]; // Loại bỏ trùng lặp trong câu thông báo
           
           toast.error(
-            `NẠP FILE THẤT BẠI! Phát hiện ${maTrùngDuyNhất.length} mã PE đang tồn đọng chưa xử lý xong từ hôm qua. Vui lòng kiểm tra lại các mã: ${maTrùngDuyNhất.join(', ')}`,
+            `NẠP FILE THẤT BẠI! Phát hiện ${maTrùngDuyNhất.length} mã PE đã tồn tại trên hệ thống (trong kho tồn đọng hoặc đang trên tay Nhân viên). Vui lòng loại bỏ các mã này khỏi file Excel: ${maTrùngDuyNhất.join(', ')}`,
             { duration: 8000, style: { border: '1px solid #f5c6cb', padding: '12px', color: '#721c24' } }
           );
           
