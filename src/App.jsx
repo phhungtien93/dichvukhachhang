@@ -70,12 +70,12 @@ const [isProfileLoaded, setIsProfileLoaded] = useState(false);
   const canThongKe = isAdmin || access.includes('app_thong_ke');
 
   // MỚI: Đang kiểm tra session ban đầu -> hiện màn hình chờ, TRÁNH chớp login form
-if (checkingSession) {
+if (checkingSession || (session && !isProfileLoaded)) {
   return (
     <div className="h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center text-blue-500">
          <i className="fa-solid fa-circle-notch animate-spin text-4xl mb-3"></i>
-         <p className="font-bold text-xs animate-pulse">Đang kiểm tra đăng nhập...</p>
+         <p className="font-bold text-xs animate-pulse">Đang tải dữ liệu...</p>
       </div>
     </div>
   );
@@ -148,18 +148,6 @@ if (!session) {
             </button>
           </form>
 
-        </div>
-      </div>
-    );
-  }
-
-  // Nếu đang loading thông tin Profile thì hiển thị màn hình chờ mượt mà
-  if (!isProfileLoaded) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center text-blue-500">
-           <i className="fa-solid fa-circle-notch animate-spin text-4xl mb-3"></i>
-           <p className="font-bold text-xs animate-pulse">Đang rà soát quyền hạn...</p>
         </div>
       </div>
     );
