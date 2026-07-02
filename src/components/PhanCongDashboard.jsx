@@ -40,8 +40,11 @@ export default function PhanCongDashboard() {
   const [hasSearched, setHasSearched] = useState(false);
 
   // === CHẾ ĐỘ PHÂN CÔNG KÉP (CÁ NHÂN / THEO NHÓM) ===
-  const [assignMode, setAssignMode] = useState('ca_nhan'); 
-  const [danhSachNhom, setDanhSachNhom] = useState([]); 
+  // Khởi tạo state bằng bộ nhớ cục bộ để không bị mất khi F5 hoặc đổi Tab
+  const [assignMode, setAssignMode] = useState(() => {
+    return localStorage.getItem('mode_phan_cong_docthu') || 'ca_nhan';
+  }); 
+  const [danhSachNhom, setDanhSachNhom] = useState([]);
   const [activeGroupCart, setActiveGroupCart] = useState(null); // Quản lý giỏ đang mở của nhóm
   const [isCreatingGroup, setIsCreatingGroup] = useState(false); 
   const [newGroupName, setNewGroupName] = useState('');
@@ -61,13 +64,32 @@ export default function PhanCongDashboard() {
       }]);
       if (error) throw error;
       
-      toast.success('Tạo nhóm thành công!', { id: toastId });
-      setIsCreatingGroup(false);
-      setNewGroupName('');
-      setNewGroupMembers([]);
-      fetchAllData(); // Tải lại để lấy nhóm vừa tạo
+      // HÀM: Xóa Nhóm & Thu hồi việc
+  const handleDeleteGroup = async (e, nhomId, tenNhom) => {
+    e.stopPropagation(); // Ngăn chặn sự kiện click lan ra ngoài làm mở giỏ việc
+    if (!window.confirm(`XÁC NHẬN GIẢI TÁN: ${tenNhom}?\n\nToàn bộ số ca đang nằm trong Giỏ của nhóm này sẽ tự động bị rớt lại ra "Kho Việc Chưa Giao".`)) return;
+
+    const toastId = toast.loading('Đang giải tán nhóm và thu hồi việc...');
+    try {
+      // 1. Xóa nhóm khỏi Database
+      const { error: errGroup } = await supabase.from('danh_sach_nhom').delete().eq('id', nhomId);
+      if (errGroup) throw errGroup;
+
+      // 2. Trả lại toàn bộ ca của nhóm này về kho chưa giao
+      await supabase.from('danh_sach_doc_thu')
+        .update({ 
+          ten_nhom_phu_trach: null, 
+          ds_id_thanh_vien_nhom: null, 
+          ngay_nap_du_lieu: new Date().toISOString() 
+        })
+        .eq('ten_nhom_phu_trach', tenNhom)
+        .eq('is_active', true);
+
+      toast.success(`Đã giải tán ${tenNhom}!`, { id: toastId });
+      setActiveGroupCart(null);
+      fetchAllData(); // Tải lại dữ liệu để app đồng bộ
     } catch (error) {
-      toast.error('Lỗi khởi tạo nhóm!', { id: toastId });
+      toast.error('Lỗi khi giải tán nhóm!', { id: toastId });
     }
   };
 
@@ -591,13 +613,23 @@ export default function PhanCongDashboard() {
           {/* CÔNG TẮC CHUYỂN ĐỔI NHƯ MỘT TAB CHÍNH */}
           <div className="flex bg-slate-100 p-0.5 rounded-lg w-max shadow-inner border border-slate-200">
             <button 
-              onClick={() => { setAssignMode('ca_nhan'); setActiveGroupCart(null); setSelectedMicroTasks([]); }}
+              onClick={() => { 
+                setAssignMode('ca_nhan'); 
+                localStorage.setItem('mode_phan_cong_docthu', 'ca_nhan'); // Lưu vào bộ nhớ máy
+                setActiveGroupCart(null); 
+                setSelectedMicroTasks([]); 
+              }}
               className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${assignMode === 'ca_nhan' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Cá nhân
             </button>
             <button 
-              onClick={() => { setAssignMode('theo_nhom'); setActiveWorkerCart(null); setSelectedMicroTasks([]); }}
+              onClick={() => { 
+                setAssignMode('theo_nhom'); 
+                localStorage.setItem('mode_phan_cong_docthu', 'theo_nhom'); // Lưu vào bộ nhớ máy
+                setActiveWorkerCart(null); 
+                setSelectedMicroTasks([]); 
+              }}
               className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${assignMode === 'theo_nhom' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Theo Nhóm
@@ -1438,14 +1470,22 @@ export default function PhanCongDashboard() {
                       <div 
                         key={nhom.id} 
                         onClick={() => setActiveGroupCart(isActive ? null : nhom.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-purple-600 border-purple-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-purple-50 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all relative group overflow-hidden ${isActive ? 'bg-purple-600 border-purple-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-purple-50 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
                       >
-                        <div className="flex justify-between items-start">
-                          <span className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-700'}`}>{nhom.ten_nhom}</span>
-                          <i className={`fa-solid fa-basket-shopping ${isActive ? 'text-purple-300' : soCa > 0 ? 'text-purple-400' : 'text-slate-300'}`}></i>
+                        {/* Nút Xóa Nhóm hiển thị góc trên cùng bên phải */}
+                        <button 
+                          onClick={(e) => handleDeleteGroup(e, nhom.id, nhom.ten_nhom)}
+                          className={`absolute top-0 right-0 p-2 rounded-bl-lg transition-colors ${isActive ? 'bg-purple-700 hover:bg-rose-500 text-purple-200 hover:text-white' : 'bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white'}`}
+                          title="Giải tán nhóm này"
+                        >
+                          <i className="fa-solid fa-trash-can text-[10px]"></i>
+                        </button>
+
+                        <div className="flex justify-between items-start pr-5">
+                          <span className={`font-black text-sm truncate ${isActive ? 'text-white' : 'text-slate-700'}`}>{nhom.ten_nhom}</span>
                         </div>
-                        <div className={`mt-2 font-mono font-black text-xl ${isActive ? 'text-white' : soCa > 0 ? 'text-purple-700' : 'text-slate-400'}`}>
-                          {soCa} <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">Ca</span>
+                        <div className={`mt-2 font-mono font-black text-xl flex items-end gap-1 ${isActive ? 'text-white' : soCa > 0 ? 'text-purple-700' : 'text-slate-400'}`}>
+                          {soCa} <span className="text-[10px] uppercase font-bold tracking-wider opacity-70 mb-0.5">Ca</span>
                         </div>
                       </div>
                     )
@@ -1532,7 +1572,14 @@ export default function PhanCongDashboard() {
               <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Chọn thành viên (Đã chọn: {newGroupMembers.length})</label>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-                  {danhSachTho.map(tho => {
+                  {/* BỘ LỌC THÔNG MINH: Lấy ra những ông thợ chưa bị đưa vào bất kỳ nhóm nào */}
+                  {(() => {
+                    const cacThanhVienDaCoNhom = danhSachNhom.flatMap(n => n.thanh_vien_ids ? n.thanh_vien_ids.split(',') : []);
+                    const thoChuaCoNhom = danhSachTho.filter(t => !cacThanhVienDaCoNhom.includes(t.id));
+                    
+                    if (thoChuaCoNhom.length === 0) return <div className="col-span-2 text-center text-xs text-rose-500 font-bold p-3 bg-rose-50 rounded-lg">Tất cả nhân viên đã được xếp nhóm!</div>;
+                    
+                    return thoChuaCoNhom.map(tho => {
                     const isSelected = newGroupMembers.includes(tho.id);
                     return (
                       <label key={tho.id} className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
@@ -1547,6 +1594,7 @@ export default function PhanCongDashboard() {
                       </label>
                     );
                   })}
+                )}
                 </div>
               </div>
 
