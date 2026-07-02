@@ -8,27 +8,30 @@ import { supabase } from './supabase';
 
 function App() {
   const [activeTab, setActiveTab] = useState('danhsach'); 
-  const [session, setSession] = useState(null);
-  
-  // BIẾN MỚI: Tải Profile để lấy quyền ngay từ lúc khởi động app
-  const [profile, setProfile] = useState(null);
-  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
+const [session, setSession] = useState(null);
+const [checkingSession, setCheckingSession] = useState(true); // MỚI: đang kiểm tra session ban đầu
+
+// BIẾN MỚI: Tải Profile để lấy quyền ngay từ lúc khởi động app
+const [profile, setProfile] = useState(null);
+const [isProfileLoaded, setIsProfileLoaded] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else setIsProfileLoaded(true);
-    });
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setSession(session);
+    if (session) fetchProfile(session.user.id);
+    else setIsProfileLoaded(true);
+    setCheckingSession(false); // MỚI: đã biết chắc có/không có session
+  });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else { setProfile(null); setIsProfileLoaded(true); }
-    });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    setSession(session);
+    if (session) fetchProfile(session.user.id);
+    else { setProfile(null); setIsProfileLoaded(true); }
+    setCheckingSession(false); // MỚI
+  });
 
-    return () => subscription.unsubscribe();
-  }, []);
+  return () => subscription.unsubscribe();
+}, []);
 
   const fetchProfile = async (userId) => {
     const { data } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
@@ -66,9 +69,21 @@ function App() {
   const canDieuHanh = isAdmin || access.includes('app_dieu_hanh');
   const canThongKe = isAdmin || access.includes('app_thong_ke');
 
-  // CHỐT CHẶN BẢO MẬT: TỰ DỰNG GIAO DIỆN ĐĂNG NHẬP NỘI BỘ (KHÔNG PHỤ THUỘC FILE NGOÀI)
-  if (!session) {
-    const handleInlineLogin = async (e) => {
+  // MỚI: Đang kiểm tra session ban đầu -> hiện màn hình chờ, TRÁNH chớp login form
+if (checkingSession) {
+  return (
+    <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center text-blue-500">
+         <i className="fa-solid fa-circle-notch animate-spin text-4xl mb-3"></i>
+         <p className="font-bold text-xs animate-pulse">Đang kiểm tra đăng nhập...</p>
+      </div>
+    </div>
+  );
+}
+
+// CHỐT CHẶN BẢO MẬT: TỰ DỰNG GIAO DIỆN ĐĂNG NHẬP NỘI BỘ (KHÔNG PHỤ THUỘC FILE NGOÀI)
+if (!session) {
+  const handleInlineLogin = async (e) => {
       e.preventDefault();
       const email = e.target.elements.email.value;
       const password = e.target.elements.password.value;
