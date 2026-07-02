@@ -173,7 +173,8 @@ export default function PhanCongDashboard() {
       setDanhSachTho(userData || []);
 
       // BẢNG DỮ LIỆU NHÓM (Chỉ chứa dữ liệu hôm nay vì đã có pg_cron dọn dẹp)
-      const { data: nhomData } = await supabase.from('danh_sach_nhom').select('*').order('created_at');
+      // Sửa lỗi 400: Sắp xếp theo tên nhóm thay vì cột created_at không tồn tại
+      const { data: nhomData } = await supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
       setDanhSachNhom(nhomData || []);
 
       const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
