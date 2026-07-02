@@ -481,6 +481,36 @@ export default function PhanCongDashboard() {
   // Chỉ lấy những thợ có được phân việc và xếp người nhiều việc nhất lên đầu
   const danhSachTienDoTho = Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
 
+  // === THUẬT TOÁN TÍNH TIẾN ĐỘ NHÓM ===
+  const tienDoNhom = {};
+  danhSachNhom.forEach(nhom => {
+    tienDoNhom[nhom.ten_nhom] = {
+      nhomObj: nhom,
+      tongCa: 0,
+      daXuLy: 0,
+      chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 }
+    };
+  });
+
+  caHomNay.forEach(c => {
+    const tenNhom = c.ten_nhom_phu_trach;
+    if (tenNhom && tienDoNhom[tenNhom]) {
+      tienDoNhom[tenNhom].tongCa++;
+      
+      if (c.trang_thai_hien_tai !== 'chua_xu_ly') {
+        tienDoNhom[tenNhom].daXuLy++;
+      }
+      
+      if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoNhom[tenNhom].chiTiet.hen_lai++;
+      else if (c.trang_thai_hien_tai === 'da_thu') tienDoNhom[tenNhom].chiTiet.da_thu++;
+      else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoNhom[tenNhom].chiTiet.da_cat++;
+      else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoNhom[tenNhom].chiTiet.xac_minh++;
+      else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoNhom[tenNhom].chiTiet.chua_xu_ly++;
+    }
+  });
+
+  const danhSachTienDoNhomHienThi = Object.values(tienDoNhom).filter(n => n.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
+
   // 3. Phân loại Giỏ Việc (Tách biệt Cá nhân và Nhóm)
   const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
   
@@ -859,73 +889,116 @@ export default function PhanCongDashboard() {
               )}
             </div>
 
-            {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN (CHỈ HIỆN Ở TAB CÁ NHÂN) ================= */}
-            {assignMode === 'ca_nhan' && (
-              loading ? (
-                /* Hiệu ứng Skeleton Loading lúc đang tải dữ liệu */
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-2 shrink-0 animate-pulse">
-                  <div className="flex justify-between items-center mb-3">
-                    <div className="h-4 bg-slate-200 rounded w-1/3"></div>
-                    <div className="h-4 bg-slate-200 rounded-full w-12"></div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
-                    <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
-                    <div className="h-10 bg-slate-100 rounded-lg w-full opacity-50"></div>
-                  </div>
+            {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ (TỰ ĐỘNG CHUYỂN ĐỔI THEO TAB) ================= */}
+            {loading ? (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-2 shrink-0 animate-pulse">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                  <div className="h-4 bg-slate-200 rounded-full w-12"></div>
                 </div>
-              ) : danhSachTienDoTho.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
-                  
-                  {/* Header chuyển thành nút bấm đóng/mở */}
-                  <button 
-                    onClick={() => setIsProgressExpanded(!isProgressExpanded)}
-                    className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100 flex justify-between items-center transition-colors"
-                  >
-                    <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                      <i className="fa-solid fa-list-check text-blue-500"></i> Tiến độ cá nhân
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
-                        {danhSachTienDoTho.length} Nhân viên
-                      </span>
-                      <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
-                    </div>
-                  </button>
-
-                  {/* Khu vực danh sách chỉ hiện khi bấm mở (isProgressExpanded = true) */}
-                  {isProgressExpanded && (
-                    <div className="max-h-52 overflow-y-auto no-scrollbar p-2 space-y-1.5 bg-slate-50/30 border-t border-slate-200">
-                      {danhSachTienDoTho.map(tienDo => {
-                        const pt = tienDo.tongCa === 0 ? 0 : Math.round((tienDo.daXuLy / tienDo.tongCa) * 100);
-                        return (
-                          <div 
-                            key={tienDo.thoObj.id} 
-                            onClick={() => setSelectedWorkerProgress(tienDo)}
-                            className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center gap-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all active:scale-[0.98] shadow-sm"
-                          >
-                            <div className="w-[35%] truncate">
-                              <span className="font-bold text-[11px] text-slate-700">{tienDo.thoObj.ho_ten}</span>
-                            </div>
-                            
-                            <div className="flex-1 flex flex-col justify-center">
-                              <div className="flex justify-between items-center text-[9px] mb-1">
-                                <span className="font-bold text-slate-500 uppercase tracking-tight">{tienDo.daXuLy}/{tienDo.tongCa} ca</span>
-                                <span className={`font-black ${pt === 100 ? 'text-emerald-600' : 'text-blue-600'}`}>{pt}%</span>
-                              </div>
-                              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shadow-inner">
-                                <div className={`h-full rounded-full transition-all duration-700 ${pt === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pt}%` }}></div>
-                              </div>
-                            </div>
-
-                            <i className="fa-solid fa-chevron-right text-slate-300 text-[10px] shrink-0 pl-1"></i>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
+                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
                 </div>
-              )
+              </div>
+            ) : (
+              <>
+                {/* 1. KHI Ở TAB CÁ NHÂN */}
+                {assignMode === 'ca_nhan' && danhSachTienDoTho.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
+                    <button 
+                      onClick={() => setIsProgressExpanded(!isProgressExpanded)}
+                      className="w-full px-3 py-2.5 bg-blue-50 hover:bg-blue-100 flex justify-between items-center transition-colors"
+                    >
+                      <h3 className="text-[11px] font-black text-blue-800 uppercase tracking-wider flex items-center gap-2">
+                        <i className="fa-solid fa-list-check text-blue-500"></i> Tiến độ cá nhân
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
+                          {danhSachTienDoTho.length} Nhân viên
+                        </span>
+                        <i className={`fa-solid fa-chevron-down text-blue-500 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
+                      </div>
+                    </button>
+
+                    {isProgressExpanded && (
+                      <div className="max-h-52 overflow-y-auto no-scrollbar p-2 space-y-1.5 bg-slate-50/30 border-t border-slate-200">
+                        {danhSachTienDoTho.map(tienDo => {
+                          const pt = tienDo.tongCa === 0 ? 0 : Math.round((tienDo.daXuLy / tienDo.tongCa) * 100);
+                          return (
+                            <div key={tienDo.thoObj.id} onClick={() => setSelectedWorkerProgress(tienDo)} className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center gap-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all active:scale-[0.98] shadow-sm">
+                              <div className="w-[35%] truncate"><span className="font-bold text-[11px] text-slate-700">{tienDo.thoObj.ho_ten}</span></div>
+                              <div className="flex-1 flex flex-col justify-center">
+                                <div className="flex justify-between items-center text-[9px] mb-1">
+                                  <span className="font-bold text-slate-500 uppercase tracking-tight">{tienDo.daXuLy}/{tienDo.tongCa} ca</span>
+                                  <span className={`font-black ${pt === 100 ? 'text-emerald-600' : 'text-blue-600'}`}>{pt}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shadow-inner">
+                                  <div className={`h-full rounded-full transition-all duration-700 ${pt === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pt}%` }}></div>
+                                </div>
+                              </div>
+                              <i className="fa-solid fa-chevron-right text-slate-300 text-[10px] shrink-0 pl-1"></i>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. KHI Ở TAB THEO NHÓM */}
+                {assignMode === 'theo_nhom' && danhSachTienDoNhomHienThi.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
+                    <button 
+                      onClick={() => setIsProgressExpanded(!isProgressExpanded)}
+                      className="w-full px-3 py-2.5 bg-purple-50 hover:bg-purple-100 flex justify-between items-center transition-colors"
+                    >
+                      <h3 className="text-[11px] font-black text-purple-800 uppercase tracking-wider flex items-center gap-2">
+                        <i className="fa-solid fa-people-group text-purple-500"></i> Tiến độ theo Nhóm
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <span className="bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
+                          {danhSachTienDoNhomHienThi.length} Nhóm
+                        </span>
+                        <i className={`fa-solid fa-chevron-down text-purple-500 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
+                      </div>
+                    </button>
+
+                    {isProgressExpanded && (
+                      <div className="max-h-52 overflow-y-auto no-scrollbar p-2 space-y-1.5 bg-slate-50/30 border-t border-slate-200">
+                        {danhSachTienDoNhomHienThi.map(tienDo => {
+                          const pt = tienDo.tongCa === 0 ? 0 : Math.round((tienDo.daXuLy / tienDo.tongCa) * 100);
+                          return (
+                            <div key={tienDo.nhomObj.id} onClick={() => {
+                                // Tái sử dụng Popup cá nhân để hiển thị số liệu cho nhóm cực tiện lợi
+                                setSelectedWorkerProgress({ thoObj: { ho_ten: tienDo.nhomObj.ten_nhom }, chiTiet: tienDo.chiTiet });
+                            }} className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center gap-3 cursor-pointer hover:bg-purple-50 hover:border-purple-300 transition-all active:scale-[0.98] shadow-sm">
+                              <div className="w-[35%] truncate"><span className="font-bold text-[11px] text-slate-700">{tienDo.nhomObj.ten_nhom}</span></div>
+                              <div className="flex-1 flex flex-col justify-center">
+                                <div className="flex justify-between items-center text-[9px] mb-1">
+                                  <span className="font-bold text-slate-500 uppercase tracking-tight">{tienDo.daXuLy}/{tienDo.tongCa} ca</span>
+                                  <span className={`font-black ${pt === 100 ? 'text-emerald-600' : 'text-purple-600'}`}>{pt}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shadow-inner">
+                                  <div className={`h-full rounded-full transition-all duration-700 ${pt === 100 ? 'bg-emerald-500' : 'bg-purple-500'}`} style={{ width: `${pt}%` }}></div>
+                                </div>
+                              </div>
+                              <i className="fa-solid fa-chevron-right text-slate-300 text-[10px] shrink-0 pl-1"></i>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* 3. THÔNG BÁO GỌN GÀNG KHI CHƯA GIAO VIỆC CHO AI */}
+                {((assignMode === 'ca_nhan' && danhSachTienDoTho.length === 0) || (assignMode === 'theo_nhom' && danhSachTienDoNhomHienThi.length === 0)) && (
+                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-2 shrink-0 text-center text-slate-400 text-[10px] italic">
+                     Chưa có {assignMode === 'ca_nhan' ? 'nhân viên' : 'tổ/nhóm'} nào được phân việc.
+                   </div>
+                )}
+              </>
             )}
 
             {/* ================= BẮT ĐẦU KHU VỰC TỔNG QUAN ================= */}
