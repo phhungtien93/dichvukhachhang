@@ -60,11 +60,21 @@ export default function PhanCongDashboard() {
     try {
       const { error } = await supabase.from('danh_sach_nhom').insert([{
         ten_nhom: newGroupName.trim(),
-        thanh_vien_ids: newGroupMembers.join(',') // Lưu mảng dạng chuỗi "id1,id2"
+        thanh_vien_ids: newGroupMembers.join(',') 
       }]);
       if (error) throw error;
       
-      // HÀM: Xóa Nhóm & Thu hồi việc
+      toast.success('Tạo nhóm thành công!', { id: toastId });
+      setIsCreatingGroup(false);
+      setNewGroupName('');
+      setNewGroupMembers([]);
+      fetchAllData(); 
+    } catch (error) {
+      toast.error('Lỗi khởi tạo nhóm!', { id: toastId });
+    }
+  };
+
+  // HÀM: Xóa Nhóm & Thu hồi việc
   const handleDeleteGroup = async (e, nhomId, tenNhom) => {
     e.stopPropagation(); // Ngăn chặn sự kiện click lan ra ngoài làm mở giỏ việc
     if (!window.confirm(`XÁC NHẬN GIẢI TÁN: ${tenNhom}?\n\nToàn bộ số ca đang nằm trong Giỏ của nhóm này sẽ tự động bị rớt lại ra "Kho Việc Chưa Giao".`)) return;
@@ -1593,8 +1603,8 @@ export default function PhanCongDashboard() {
                         }}/>
                       </label>
                     );
-                  })}
-                )}
+                  });
+                })()}
                 </div>
               </div>
 
