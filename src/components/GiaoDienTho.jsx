@@ -359,12 +359,13 @@ export default function GiaoDienTho({ session, profile }) {
 
       {/* BƯỚC 4: THANH CÔNG CỤ NỔI BÊN DƯỚI DÀNH CHO VIỆC NHẬN CA (Sticky Bottom Bar) */}
       {selectedGroupTasks.length > 0 && activeTab === 'chua_lam' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] slide-up z-50">
+        // Đã đổi bottom-0 thành bottom-[76px] để nhô lên trên thanh Tab chính, thêm max-w-md và bo góc
+        <div className="fixed bottom-[76px] left-0 right-0 w-full max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-200 p-3 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.15)] slide-up z-40 rounded-t-2xl">
           <button 
             onClick={handleNhanViecNhom}
-            className="w-full max-w-md mx-auto block bg-blue-600 hover:bg-blue-700 text-white font-black text-sm py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2 uppercase tracking-wide"
+            className="w-full block bg-blue-600 hover:bg-blue-700 text-white font-black text-sm py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2 uppercase tracking-wide"
           >
-            <i className="fa-solid fa-hand-holding-hand"></i> Nhận {selectedGroupTasks.length} ca này về máy
+            <i className="fa-solid fa-hand-holding-hand text-lg"></i> Nhận {selectedGroupTasks.length} ca này về máy
           </button>
         </div>
       )}
