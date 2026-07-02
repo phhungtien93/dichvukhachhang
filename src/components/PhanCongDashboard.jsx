@@ -859,72 +859,7 @@ export default function PhanCongDashboard() {
               )}
             </div>
 
-            {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN ================= */}
-            {loading ? (
-              /* Hiệu ứng Skeleton Loading lúc đang tải dữ liệu */
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-2 shrink-0 animate-pulse">
-                <div className="flex justify-between items-center mb-3">
-                  <div className="h-4 bg-slate-200 rounded w-1/3"></div>
-                  <div className="h-4 bg-slate-200 rounded-full w-12"></div>
-                </div>
-                <div className="space-y-2">
-                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
-                  <div className="h-10 bg-slate-100 rounded-lg w-full"></div>
-                  <div className="h-10 bg-slate-100 rounded-lg w-full opacity-50"></div>
-                </div>
-              </div>
-            ) : danhSachTienDoTho.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-2 fade-in shrink-0">
-                
-                {/* Header chuyển thành nút bấm đóng/mở */}
-                <button 
-                  onClick={() => setIsProgressExpanded(!isProgressExpanded)}
-                  className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100 flex justify-between items-center transition-colors"
-                >
-                  <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                    <i className="fa-solid fa-list-check text-blue-500"></i> Tiến độ cá nhân
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-black shadow-sm">
-                      {danhSachTienDoTho.length} Nhân viên
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${isProgressExpanded ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {/* Khu vực danh sách chỉ hiện khi bấm mở (isProgressExpanded = true) */}
-                {isProgressExpanded && (
-                  <div className="max-h-52 overflow-y-auto no-scrollbar p-2 space-y-1.5 bg-slate-50/30 border-t border-slate-200">
-                    {danhSachTienDoTho.map(tienDo => {
-                      const pt = tienDo.tongCa === 0 ? 0 : Math.round((tienDo.daXuLy / tienDo.tongCa) * 100);
-                      return (
-                        <div 
-                          key={tienDo.thoObj.id} 
-                          onClick={() => setSelectedWorkerProgress(tienDo)}
-                          className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center gap-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all active:scale-[0.98] shadow-sm"
-                        >
-                          <div className="w-[35%] truncate">
-                            <span className="font-bold text-[11px] text-slate-700">{tienDo.thoObj.ho_ten}</span>
-                          </div>
-                          
-                          <div className="flex-1 flex flex-col justify-center">
-                            <div className="flex justify-between items-center text-[9px] mb-1">
-                              <span className="font-bold text-slate-500 uppercase tracking-tight">{tienDo.daXuLy}/{tienDo.tongCa} ca</span>
-                              <span className={`font-black ${pt === 100 ? 'text-emerald-600' : 'text-blue-600'}`}>{pt}%</span>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shadow-inner">
-                              <div className={`h-full rounded-full transition-all duration-700 ${pt === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pt}%` }}></div>
-                            </div>
-                          </div>
-
-                          <i className="fa-solid fa-chevron-right text-slate-300 text-[10px] shrink-0 pl-1"></i>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}{/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN (CHỈ HIỆN Ở TAB CÁ NHÂN) ================= */}
+            {/* ================= BẮT ĐẦU KHU VỰC TIẾN ĐỘ CÁ NHÂN (CHỈ HIỆN Ở TAB CÁ NHÂN) ================= */}
             {assignMode === 'ca_nhan' && (
               loading ? (
                 /* Hiệu ứng Skeleton Loading lúc đang tải dữ liệu */
