@@ -34,9 +34,8 @@ const [isProfileLoaded, setIsProfileLoaded] = useState(false);
 }, []);
 
 const fetchProfile = async (userId) => {
-    const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
-    console.log('DEBUG profile:', data, 'error:', error); // MỚI - dòng debug tạm thời
-  // Nếu bị lỗi hoặc chưa có data -> thử lại 1 lần nữa sau 500ms, KHÔNG vội kết luận "hết quyền"
+  setIsProfileLoaded(false); // MỚI: reset về false NGAY khi bắt đầu tải profile mới, tránh lọt qua màn hình chặn quyền
+  const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
   if (error || !data) {
     setTimeout(async () => {
       const retry = await supabase.from('user_profiles').select('*').eq('id', userId).single();
