@@ -47,30 +47,54 @@ export default function PhanCongDashboard() {
   const [danhSachNhom, setDanhSachNhom] = useState([]);
   const [activeGroupCart, setActiveGroupCart] = useState(null); // Quản lý giỏ đang mở của nhóm
   const [isCreatingGroup, setIsCreatingGroup] = useState(false); 
+  const [editingGroup, setEditingGroup] = useState(null); // BIẾN MỚI: Theo dõi xem có đang sửa nhóm nào không
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState([]);
 
-  // HÀM: Tạo Nhóm lưu thẳng vào Supabase
-  const handleCreateGroup = async (e) => {
+  // HÀM: Lưu Nhóm (Dùng chung cho cả Tạo Mới và Hiệu Chỉnh)
+  const handleSaveGroup = async (e) => {
     e.preventDefault();
     if (!newGroupName.trim()) return toast.error('Vui lòng nhập tên nhóm!');
     if (newGroupMembers.length === 0) return toast.error('Vui lòng chọn ít nhất 1 thành viên!');
     
-    const toastId = toast.loading('Đang khởi tạo nhóm...');
+    const chuoiThanhVien = newGroupMembers.join(',');
+    const toastId = toast.loading(editingGroup ? 'Đang cập nhật nhóm...' : 'Đang khởi tạo nhóm...');
+    
     try {
-      const { error } = await supabase.from('danh_sach_nhom').insert([{
-        ten_nhom: newGroupName.trim(),
-        thanh_vien_ids: newGroupMembers.join(',') 
-      }]);
-      if (error) throw error;
+      if (editingGroup) {
+        // LUỒNG 1: HIỆU CHỈNH NHÓM ĐÃ CÓ
+        // A. Cập nhật thông tin trên bảng danh_sach_nhom
+        const { error: errGroup } = await supabase.from('danh_sach_nhom').update({
+          ten_nhom: newGroupName.trim(),
+          thanh_vien_ids: chuoiThanhVien
+        }).eq('id', editingGroup.id);
+        if (errGroup) throw errGroup;
+
+        // B. Cập nhật (Đồng bộ) lại thành viên cho tất cả các ca đang nằm trong giỏ của nhóm này
+        await supabase.from('danh_sach_doc_thu').update({
+          ten_nhom_phu_trach: newGroupName.trim(),
+          ds_id_thanh_vien_nhom: chuoiThanhVien
+        }).eq('ten_nhom_phu_trach', editingGroup.ten_nhom).eq('is_active', true);
+
+        toast.success('Cập nhật nhóm thành công!', { id: toastId });
+      } else {
+        // LUỒNG 2: TẠO NHÓM MỚI (Như cũ)
+        const { error: errNew } = await supabase.from('danh_sach_nhom').insert([{
+          ten_nhom: newGroupName.trim(),
+          thanh_vien_ids: chuoiThanhVien 
+        }]);
+        if (errNew) throw errNew;
+        toast.success('Tạo nhóm thành công!', { id: toastId });
+      }
       
-      toast.success('Tạo nhóm thành công!', { id: toastId });
+      // Dọn dẹp giao diện sau khi xong
       setIsCreatingGroup(false);
+      setEditingGroup(null);
       setNewGroupName('');
       setNewGroupMembers([]);
       fetchAllData(); 
     } catch (error) {
-      toast.error('Lỗi khởi tạo nhóm!', { id: toastId });
+      toast.error('Có lỗi xảy ra khi lưu nhóm!', { id: toastId });
     }
   };
 
@@ -1336,8 +1360,16 @@ export default function PhanCongDashboard() {
                         <div className="flex justify-between items-center w-full mb-0.5">
                           <span className="text-[9px] text-slate-400 font-bold uppercase">Đẩy nhanh vào giỏ:</span>
                           {assignMode === 'theo_nhom' && (
-                            <button onClick={() => setIsCreatingGroup(true)} className="text-[9px] font-black text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-full transition-colors active:scale-95">
-                              + Tạo Nhóm
+                            <button 
+                              onClick={() => {
+                                setEditingGroup(null); // Đảm bảo là chế độ Tạo Mới
+                                setNewGroupName('');
+                                setNewGroupMembers([]);
+                                setIsCreatingGroup(true);
+                              }} 
+                              className="text-[9px] font-black text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-full transition-colors active:scale-95"
+                            >
+                              + Tạo Tổ/Nhóm
                             </button>
                           )}
                         </div>
@@ -1482,16 +1514,31 @@ export default function PhanCongDashboard() {
                         onClick={() => setActiveGroupCart(isActive ? null : nhom.id)}
                         className={`p-3 rounded-xl border cursor-pointer transition-all relative group overflow-hidden ${isActive ? 'bg-purple-600 border-purple-700 shadow-lg scale-[1.02]' : soCa > 0 ? 'bg-gradient-to-br from-slate-50 to-purple-50 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 opacity-70'}`}
                       >
-                        {/* Nút Xóa Nhóm hiển thị góc trên cùng bên phải */}
-                        <button 
-                          onClick={(e) => handleDeleteGroup(e, nhom.id, nhom.ten_nhom)}
-                          className={`absolute top-0 right-0 p-2 rounded-bl-lg transition-colors ${isActive ? 'bg-purple-700 hover:bg-rose-500 text-purple-200 hover:text-white' : 'bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white'}`}
-                          title="Giải tán nhóm này"
-                        >
-                          <i className="fa-solid fa-trash-can text-[10px]"></i>
-                        </button>
+                        {/* Bộ công cụ SỬA / XÓA nằm góc trên cùng bên phải */}
+                        <div className="absolute top-0 right-0 flex">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingGroup(nhom); // Kích hoạt chế độ Sửa
+                              setNewGroupName(nhom.ten_nhom);
+                              setNewGroupMembers(nhom.thanh_vien_ids ? nhom.thanh_vien_ids.split(',') : []);
+                              setIsCreatingGroup(true);
+                            }}
+                            className={`p-2 rounded-bl-lg transition-colors ${isActive ? 'bg-purple-700 hover:bg-blue-500 text-purple-200 hover:text-white' : 'bg-slate-100 hover:bg-blue-500 text-slate-400 hover:text-white'}`}
+                            title="Sửa thành viên & Tên nhóm"
+                          >
+                            <i className="fa-solid fa-pen text-[10px]"></i>
+                          </button>
+                          <button 
+                            onClick={(e) => handleDeleteGroup(e, nhom.id, nhom.ten_nhom)}
+                            className={`p-2 transition-colors ${isActive ? 'bg-purple-700 hover:bg-rose-500 text-purple-200 hover:text-white' : 'bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white'}`}
+                            title="Giải tán nhóm này"
+                          >
+                            <i className="fa-solid fa-trash-can text-[10px]"></i>
+                          </button>
+                        </div>
 
-                        <div className="flex justify-between items-start pr-5">
+                        <div className="flex justify-between items-start pr-12">
                           <span className={`font-black text-sm truncate ${isActive ? 'text-white' : 'text-slate-700'}`}>{nhom.ten_nhom}</span>
                         </div>
                         <div className={`mt-2 font-mono font-black text-xl flex items-end gap-1 ${isActive ? 'text-white' : soCa > 0 ? 'text-purple-700' : 'text-slate-400'}`}>
@@ -1553,20 +1600,22 @@ export default function PhanCongDashboard() {
         </div>
       )}
 
-      {/* ================= MODAL TẠO NHÓM MỚI ================= */}
+      {/* ================= MODAL TẠO / SỬA NHÓM ================= */}
       {isCreatingGroup && (
         <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
             <div className="p-4 border-b border-slate-100 bg-purple-50 flex justify-between items-center">
               <h3 className="font-black text-purple-800 uppercase flex items-center gap-2 text-sm">
-                <i className="fa-solid fa-people-group"></i> Lập Nhóm Mới
+                <i className={`fa-solid ${editingGroup ? 'fa-pen-to-square' : 'fa-people-group'}`}></i> 
+                {editingGroup ? 'Hiệu Chỉnh Nhóm' : 'Lập Nhóm Mới'}
               </h3>
-              <button onClick={() => { setIsCreatingGroup(false); setNewGroupName(''); setNewGroupMembers([]); }} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
+              <button onClick={() => { setIsCreatingGroup(false); setEditingGroup(null); setNewGroupName(''); setNewGroupMembers([]); }} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
                 <i className="fa-solid fa-xmark"></i>
               </button>
             </div>
             
-            <form onSubmit={handleCreateGroup} className="p-4 space-y-4">
+            {/* Form trỏ về hàm handleSaveGroup mới */}
+            <form onSubmit={handleSaveGroup} className="p-4 space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tên Tổ / Nhóm</label>
                 <input 
@@ -1582,34 +1631,40 @@ export default function PhanCongDashboard() {
               <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Chọn thành viên (Đã chọn: {newGroupMembers.length})</label>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-                  {/* BỘ LỌC THÔNG MINH: Lấy ra những ông thợ chưa bị đưa vào bất kỳ nhóm nào */}
+                  
+                  {/* BỘ LỌC THÔNG MINH (Bản nâng cấp): Lấy thợ trống + thợ ĐANG NẰM TRONG nhóm này (nếu đang sửa) */}
                   {(() => {
-                    const cacThanhVienDaCoNhom = danhSachNhom.flatMap(n => n.thanh_vien_ids ? n.thanh_vien_ids.split(',') : []);
-                    const thoChuaCoNhom = danhSachTho.filter(t => !cacThanhVienDaCoNhom.includes(t.id));
+                    // Lọc ra các nhóm KHÁC nhóm đang sửa để thu thập ID những người đã bị bế đi
+                    const cacNhomKhac = editingGroup ? danhSachNhom.filter(n => n.id !== editingGroup.id) : danhSachNhom;
+                    const idDaBiLay = cacNhomKhac.flatMap(n => n.thanh_vien_ids ? n.thanh_vien_ids.split(',') : []);
                     
-                    if (thoChuaCoNhom.length === 0) return <div className="col-span-2 text-center text-xs text-rose-500 font-bold p-3 bg-rose-50 rounded-lg">Tất cả nhân viên đã được xếp nhóm!</div>;
+                    const thoHienThi = danhSachTho.filter(t => !idDaBiLay.includes(t.id));
                     
-                    return thoChuaCoNhom.map(tho => {
-                    const isSelected = newGroupMembers.includes(tho.id);
-                    return (
-                      <label key={tho.id} className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
-                          {isSelected && <i className="fa-solid fa-check text-[10px]"></i>}
-                        </div>
-                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-purple-700' : 'text-slate-600'}`}>{tho.ho_ten}</span>
-                        <input type="checkbox" className="hidden" checked={isSelected} onChange={(e) => {
-                          if (e.target.checked) setNewGroupMembers([...newGroupMembers, tho.id]);
-                          else setNewGroupMembers(newGroupMembers.filter(id => id !== tho.id));
-                        }}/>
-                      </label>
-                    );
-                  });
-                })()}
+                    if (thoHienThi.length === 0) return <div className="col-span-2 text-center text-xs text-rose-500 font-bold p-3 bg-rose-50 rounded-lg">Không còn nhân viên nào rảnh rỗi!</div>;
+                    
+                    return thoHienThi.map(tho => {
+                      const isSelected = newGroupMembers.includes(tho.id);
+                      return (
+                        <label key={tho.id} className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <i className="fa-solid fa-check text-[10px]"></i>}
+                          </div>
+                          <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-purple-700' : 'text-slate-600'}`}>{tho.ho_ten}</span>
+                          <input type="checkbox" className="hidden" checked={isSelected} onChange={(e) => {
+                            if (e.target.checked) setNewGroupMembers([...newGroupMembers, tho.id]);
+                            else setNewGroupMembers(newGroupMembers.filter(id => id !== tho.id));
+                          }}/>
+                        </label>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
               <div className="pt-2">
-                <button type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all uppercase tracking-wider">Khởi Tạo Nhóm</button>
+                <button type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all uppercase tracking-wider">
+                  {editingGroup ? 'CẬP NHẬT NHÓM' : 'KHỞI TẠO NHÓM'}
+                </button>
               </div>
             </form>
           </div>
