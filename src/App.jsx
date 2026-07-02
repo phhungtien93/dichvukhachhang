@@ -33,9 +33,9 @@ const [isProfileLoaded, setIsProfileLoaded] = useState(false);
   return () => subscription.unsubscribe();
 }, []);
 
-  const fetchProfile = async (userId) => {
-  const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
-  
+const fetchProfile = async (userId) => {
+    const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+    console.log('DEBUG profile:', data, 'error:', error); // MỚI - dòng debug tạm thời
   // Nếu bị lỗi hoặc chưa có data -> thử lại 1 lần nữa sau 500ms, KHÔNG vội kết luận "hết quyền"
   if (error || !data) {
     setTimeout(async () => {
