@@ -1295,28 +1295,38 @@ export default function PhanCongDashboard() {
                           </>
                         )}
 
-                        {/* RẼ NHÁNH IF: NÚT GIAO VIỆC */}
-                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">{assignMode === 'ca_nhan' ? 'Giao Nv:' : 'Giao Nhóm:'}</span>
+                        {/* RẼ NHÁNH IF: NÚT GIAO VIỆC NHANH TRỰC TIẾP */}
+                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">
+                          <i className="fa-solid fa-share mr-1"></i>
+                          {assignMode === 'ca_nhan' ? 'Chuyển nhanh cho Nv:' : 'Chuyển nhanh cho Nhóm:'}
+                        </span>
+                        
                         {assignMode === 'ca_nhan' ? (
                           danhSachTho.map(tho => (
                             <button
                               key={tho.id}
                               onClick={() => handleGiaoCumTru([c], tho)}
-                              className="bg-white hover:bg-blue-50 border border-slate-200 text-slate-600 hover:text-blue-700 px-2 py-1.5 rounded text-[9px] font-bold shrink-0 transition-colors"
+                              className="bg-white hover:bg-blue-500 border border-slate-200 hover:border-blue-600 text-slate-600 hover:text-white px-2 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                              title={`Bấm để giao ca này cho ${tho.ho_ten}`}
                             >
-                              {tho.ho_ten}
+                              <i className="fa-solid fa-plus text-[8px]"></i> {tho.ho_ten}
                             </button>
                           ))
                         ) : (
-                          danhSachNhom.map(nhom => (
-                            <button
-                              key={nhom.id}
-                              onClick={() => handleGiaoCaChoNhom([c], nhom)}
-                              className="bg-purple-50 border border-purple-200 hover:bg-purple-600 hover:text-white text-purple-700 px-2 py-1.5 rounded text-[9px] font-bold shrink-0 transition-colors"
-                            >
-                              {nhom.ten_nhom}
-                            </button>
-                          ))
+                          danhSachNhom.length === 0 ? (
+                             <span className="text-[9px] text-slate-400 italic">Chưa có nhóm để giao</span>
+                          ) : (
+                            danhSachNhom.map(nhom => (
+                              <button
+                                key={nhom.id}
+                                onClick={() => handleGiaoCaChoNhom([c], nhom)}
+                                className="bg-purple-50 hover:bg-purple-600 border border-purple-200 hover:border-purple-700 text-purple-700 hover:text-white px-2 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                title={`Bấm để giao ca này cho ${nhom.ten_nhom}`}
+                              >
+                                <i className="fa-solid fa-plus text-[8px]"></i> {nhom.ten_nhom}
+                              </button>
+                            ))
+                          )
                         )}
                       </div>
                     </div>
