@@ -222,38 +222,42 @@ export default function PhanCongDashboard() {
   
   // 1. TẢI DỮ LIỆU TỪ SUPABASE
   const fetchAllData = async () => {
-    setLoading(true);
-    try {
-      // Tải danh sách nhân viên thực tế (Chỉ lấy Role là user/thợ)
-      const { data: userData } = await supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
-      setDanhSachTho(userData || []);
-
-      // BẢNG DỮ LIỆU NHÓM (Chỉ chứa dữ liệu hôm nay vì đã có pg_cron dọn dẹp)
-      // Sửa lỗi 400: Sắp xếp theo tên nhóm thay vì cột created_at không tồn tại
-      const { data: nhomData } = await supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
-      setDanhSachNhom(nhomData || []);
-
-      const { data: tramData } = await supabase.from('danh_muc_tram').select('*');
-      setDanhMucTram(tramData || []);
-
-      const { data: tienToData } = await supabase.from('danh_muc_ma_xuat_tuyen').select('*');
-      setDanhMucTienTo(tienToData || []);
-
-      // Tải danh sách đốc thu (Chỉ lấy các ca CÒN MỞ PHIÊN của ngày hôm nay/chưa chốt sổ)
-      const { data: dsData, error: dsErr } = await supabase
+  setLoading(true);
+  try {
+    // MỚI: Gộp cả 5 lượt gọi Supabase để chạy SONG SONG cùng lúc bằng Promise.all
+    // Thay vì chờ tuần tự (query 1 xong mới chạy query 2...), giờ cả 5 chạy đồng thời
+    // => tổng thời gian tải = thời gian của lượt CHẬM NHẤT, thay vì cộng dồn cả 5 lượt
+    const [
+      { data: userData },
+      { data: nhomData },
+      { data: tramData },
+      { data: tienToData },
+      { data: dsData, error: dsErr }
+    ] = await Promise.all([
+      supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten'),
+      supabase.from('danh_sach_nhom').select('*').order('ten_nhom'),
+      supabase.from('danh_muc_tram').select('*'),
+      supabase.from('danh_muc_ma_xuat_tuyen').select('*'),
+      supabase
         .from('danh_sach_doc_thu')
         .select('*')
-        // SỬA LỖI: Nhét thêm 'da_bao_hen' vào mảng để Supabase không vứt bỏ ca này
         .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
-        .eq('is_active', true);
-      if (dsErr) throw dsErr;
-      setDanhSach(dsData || []);
-    } catch (error) {
-      toast.error('Lỗi kết nối cơ sở dữ liệu!');
-    } finally {
-      setLoading(false);
-    }
-  };
+        .eq('is_active', true)
+    ]);
+
+    if (dsErr) throw dsErr;
+
+    setDanhSachTho(userData || []);
+    setDanhSachNhom(nhomData || []);
+    setDanhMucTram(tramData || []);
+    setDanhMucTienTo(tienToData || []);
+    setDanhSach(dsData || []);
+  } catch (error) {
+    toast.error('Lỗi kết nối cơ sở dữ liệu!');
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchAllData();
