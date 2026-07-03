@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -406,146 +406,137 @@ export default function PhanCongDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // === LOGIC PHÂN LOẠI THỜI GIAN VÀ KHO VIỆC ===
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0, 0, 0, 0); // Mốc 00:00 ngày hôm nay
+  // === LOGIC PHÂN LOẠI THỜI GIAN VÀ KHO VIỆC (ĐÃ TỐI ƯU HÓA BẰNG USEMEMO CHỐNG LAG) ===
+  const todayMidnight = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
-  // Phân tách tệp dữ liệu rạch ròi ngay từ đầu (Dùng cột ngay_nap_du_lieu)
-  const caHomNay = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) >= todayMidnight);
-  const caTonDong = danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight);
-
-  // 1. Dành cho Khối TỒN ĐỌNG (Lấy từ caTonDong)
-  const tonDongHenLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
-  const tonDongChuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
-  const danhSachTonDongHienThi = backlogTab === 'hen_lai' ? tonDongHenLai : tonDongChuaLam;
-
-  // 2. Dành cho Khối TỔNG QUAN (Ép buộc TẤT CẢ các thẻ đều chỉ đếm dữ liệu của HÔM NAY)
-  const demHenLaiHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen').length;
-  const demChuaXuHomNay = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly').length;
-  const demDaThu = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_thu').length;
-  const demDaCat = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien').length;
-  const demXacMinh = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh').length; 
-  const demLoiKinhDoanh = caHomNay.filter(c => c.trang_thai_hien_tai === 'loi_dong_bo_kd').length; // CHỈ SỐ MỚI
-
-  // Thuật toán tính Tổng ca và Tiến Độ (Gom cả Lỗi KD vào để tổng ca không bị hụt mất)
-  const tongSoCa = demHenLaiHomNay + demChuaXuHomNay + demDaThu + demDaCat + demXacMinh + demLoiKinhDoanh;
-  const tongDaXuLy = demDaThu + demDaCat + demHenLaiHomNay + demXacMinh + demLoiKinhDoanh; 
-  const ptTong = tongSoCa === 0 ? 0 : Math.round((tongDaXuLy / tongSoCa) * 100);
-
-  const danhSachHienThiTongQuan = caHomNay.filter(c => 
-    overviewTab === 'hen_lai' 
-      ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') 
-      : c.trang_thai_hien_tai === overviewTab
-  );
-
-  // === THUẬT TOÁN TRA CỨU NHANH (LIVE SEARCH) ===
-  const quickSearchResults = quickSearchQuery.trim() === '' 
-    ? [] 
-    : caHomNay.filter(c => 
-        (c.ma_pe && c.ma_pe.toLowerCase().includes(quickSearchQuery.toLowerCase())) ||
-        (c.ten_kh && c.ten_kh.toLowerCase().includes(quickSearchQuery.toLowerCase())) ||
-        (c.so_dien_thoai && c.so_dien_thoai.includes(quickSearchQuery))
-      ).slice(0, 5); // Chỉ lấy 5 kết quả đầu tiên để chống tràn màn hình
-
-  // === THUẬT TOÁN TÍNH TIẾN ĐỘ CÁ NHÂN ===
-  const tienDoTho = {};
-  danhSachTho.forEach(tho => {
-    tienDoTho[tho.id] = {
-      thoObj: tho,
-      tongCa: 0,
-      daXuLy: 0,
-      chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 }
+  const { caHomNay, caTonDong } = useMemo(() => {
+    return {
+      caHomNay: danhSach.filter(c => new Date(c.ngay_nap_du_lieu) >= todayMidnight),
+      caTonDong: danhSach.filter(c => new Date(c.ngay_nap_du_lieu) < todayMidnight)
     };
-  });
+  }, [danhSach, todayMidnight]);
 
-  caHomNay.forEach(c => {
-    // Ưu tiên tho_id, nếu không có thì dò qua tên (để tương thích ngược)
-    const thoId = c.tho_id || (danhSachTho.find(t => t.ho_ten === c.nguoi_phu_trach)?.id);
-    if (thoId && tienDoTho[thoId]) {
-      tienDoTho[thoId].tongCa++;
-      
-      // Tính số ca đã xử lý (Mọi trạng thái khác 'chua_xu_ly' đều tính là đã đụng tay vào)
-      if (c.trang_thai_hien_tai !== 'chua_xu_ly') {
-        tienDoTho[thoId].daXuLy++;
-      }
-      
-      // Bóc tách chi tiết từng trạng thái
-      if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoTho[thoId].chiTiet.hen_lai++;
-      else if (c.trang_thai_hien_tai === 'da_thu') tienDoTho[thoId].chiTiet.da_thu++;
-      else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoTho[thoId].chiTiet.da_cat++;
-      else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoTho[thoId].chiTiet.xac_minh++;
-      else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoTho[thoId].chiTiet.chua_xu_ly++;
-    }
-  });
-
-  // Chỉ lấy những thợ có được phân việc và xếp người nhiều việc nhất lên đầu
-  const danhSachTienDoTho = Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
-
-  // === THUẬT TOÁN TÍNH TIẾN ĐỘ NHÓM ===
-  const tienDoNhom = {};
-  danhSachNhom.forEach(nhom => {
-    tienDoNhom[nhom.ten_nhom] = {
-      nhomObj: nhom,
-      tongCa: 0,
-      daXuLy: 0,
-      chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 }
+  // 1. Khối TỒN ĐỌNG
+  const { tonDongHenLai, tonDongChuaLam, danhSachTonDongHienThi } = useMemo(() => {
+    const henLai = caTonDong.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
+    const chuaLam = caTonDong.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
+    return {
+      tonDongHenLai: henLai,
+      tonDongChuaLam: chuaLam,
+      danhSachTonDongHienThi: backlogTab === 'hen_lai' ? henLai : chuaLam
     };
-  });
+  }, [caTonDong, backlogTab]);
 
-  caHomNay.forEach(c => {
-    const tenNhom = c.ten_nhom_phu_trach;
-    if (tenNhom && tienDoNhom[tenNhom]) {
-      tienDoNhom[tenNhom].tongCa++;
-      
-      if (c.trang_thai_hien_tai !== 'chua_xu_ly') {
-        tienDoNhom[tenNhom].daXuLy++;
+  // 2. Khối TỔNG QUAN
+  const { demHenLaiHomNay, demChuaXuHomNay, demDaThu, demDaCat, demXacMinh, demLoiKinhDoanh, tongSoCa, tongDaXuLy, ptTong, danhSachHienThiTongQuan } = useMemo(() => {
+    const henLai = caHomNay.filter(c => c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen');
+    const chuaXu = caHomNay.filter(c => c.trang_thai_hien_tai === 'chua_xu_ly');
+    const daThu = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_thu');
+    const daCat = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_cat_dien');
+    const xacMinh = caHomNay.filter(c => c.trang_thai_hien_tai === 'da_chuyen_xac_minh');
+    const loiKd = caHomNay.filter(c => c.trang_thai_hien_tai === 'loi_dong_bo_kd');
+
+    const tong = henLai.length + chuaXu.length + daThu.length + daCat.length + xacMinh.length + loiKd.length;
+    const daXuLy = daThu.length + daCat.length + henLai.length + xacMinh.length + loiKd.length;
+
+    return {
+      demHenLaiHomNay: henLai.length, demChuaXuHomNay: chuaXu.length, demDaThu: daThu.length, demDaCat: daCat.length, demXacMinh: xacMinh.length, demLoiKinhDoanh: loiKd.length,
+      tongSoCa: tong, tongDaXuLy: daXuLy, ptTong: tong === 0 ? 0 : Math.round((daXuLy / tong) * 100),
+      danhSachHienThiTongQuan: caHomNay.filter(c => overviewTab === 'hen_lai' ? (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') : c.trang_thai_hien_tai === overviewTab)
+    };
+  }, [caHomNay, overviewTab]);
+
+  // === THUẬT TOÁN TRA CỨU NHANH ===
+  const quickSearchResults = useMemo(() => {
+    if (quickSearchQuery.trim() === '') return [];
+    const q = quickSearchQuery.toLowerCase();
+    return caHomNay.filter(c => 
+      (c.ma_pe && c.ma_pe.toLowerCase().includes(q)) ||
+      (c.ten_kh && c.ten_kh.toLowerCase().includes(q)) ||
+      (c.so_dien_thoai && c.so_dien_thoai.includes(q))
+    ).slice(0, 5);
+  }, [caHomNay, quickSearchQuery]);
+
+  // === THUẬT TOÁN TÍNH TIẾN ĐỘ & KHO VIỆC ===
+  const { danhSachTienDoTho, danhSachTienDoNhomHienThi, khoViec, gioViec, gioViecNhom, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom } = useMemo(() => {
+    // 1. Tiến độ thợ
+    const tienDoTho = {};
+    danhSachTho.forEach(tho => {
+      tienDoTho[tho.id] = { thoObj: tho, tongCa: 0, daXuLy: 0, chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 } };
+    });
+
+    // 2. Tiến độ nhóm
+    const tienDoNhomObj = {};
+    danhSachNhom.forEach(nhom => {
+      tienDoNhomObj[nhom.ten_nhom] = { nhomObj: nhom, tongCa: 0, daXuLy: 0, chiTiet: { hen_lai: 0, da_thu: 0, da_cat: 0, xac_minh: 0, chua_xu_ly: 0 } };
+    });
+
+    caHomNay.forEach(c => {
+      // Cập nhật cá nhân
+      const thoId = c.tho_id || (danhSachTho.find(t => t.ho_ten === c.nguoi_phu_trach)?.id);
+      if (thoId && tienDoTho[thoId]) {
+        tienDoTho[thoId].tongCa++;
+        if (c.trang_thai_hien_tai !== 'chua_xu_ly') tienDoTho[thoId].daXuLy++;
+        if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoTho[thoId].chiTiet.hen_lai++;
+        else if (c.trang_thai_hien_tai === 'da_thu') tienDoTho[thoId].chiTiet.da_thu++;
+        else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoTho[thoId].chiTiet.da_cat++;
+        else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoTho[thoId].chiTiet.xac_minh++;
+        else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoTho[thoId].chiTiet.chua_xu_ly++;
       }
-      
-      if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoNhom[tenNhom].chiTiet.hen_lai++;
-      else if (c.trang_thai_hien_tai === 'da_thu') tienDoNhom[tenNhom].chiTiet.da_thu++;
-      else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoNhom[tenNhom].chiTiet.da_cat++;
-      else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoNhom[tenNhom].chiTiet.xac_minh++;
-      else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoNhom[tenNhom].chiTiet.chua_xu_ly++;
-    }
-  });
 
-  const danhSachTienDoNhomHienThi = Object.values(tienDoNhom).filter(n => n.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa);
+      // Cập nhật nhóm
+      const tenNhom = c.ten_nhom_phu_trach;
+      if (tenNhom && tienDoNhomObj[tenNhom]) {
+        tienDoNhomObj[tenNhom].tongCa++;
+        if (c.trang_thai_hien_tai !== 'chua_xu_ly') tienDoNhomObj[tenNhom].daXuLy++;
+        if (c.trang_thai_hien_tai === 'hen_lai' || c.trang_thai_hien_tai === 'da_bao_hen') tienDoNhomObj[tenNhom].chiTiet.hen_lai++;
+        else if (c.trang_thai_hien_tai === 'da_thu') tienDoNhomObj[tenNhom].chiTiet.da_thu++;
+        else if (c.trang_thai_hien_tai === 'da_chuyen_cat_dien') tienDoNhomObj[tenNhom].chiTiet.da_cat++;
+        else if (c.trang_thai_hien_tai === 'da_chuyen_xac_minh') tienDoNhomObj[tenNhom].chiTiet.xac_minh++;
+        else if (c.trang_thai_hien_tai === 'chua_xu_ly') tienDoNhomObj[tenNhom].chiTiet.chua_xu_ly++;
+      }
+    });
 
-  // 3. Phân loại Giỏ Việc (Tách biệt Cá nhân và Nhóm)
-  const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
-  
-  // Ca Chưa Giao: Bắt buộc phải trống cả tên Nhân viên LẪN tên Nhóm
-  const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  
-  const caDaGiaoCaNhan = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
-  const caDaGiaoNhom = caHomNay.filter(c => c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+    const completedStatuses = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd']; 
+    const caChuaGiao = caHomNay.filter(c => !c.nguoi_phu_trach && !c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+    const caDaGiaoCaNhan = caHomNay.filter(c => c.nguoi_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
+    const caDaGiaoNhom = caHomNay.filter(c => c.ten_nhom_phu_trach && !completedStatuses.includes(c.trang_thai_hien_tai));
 
-  const khoViec = {};
-  caChuaGiao.forEach(c => {
-    const soGCS = c.so_gcs || 'Chưa rõ Sổ';
-    const nhom = c.nhom_phan_cong;
-    if (!khoViec[soGCS]) khoViec[soGCS] = {};
-    if (!khoViec[soGCS][nhom]) khoViec[soGCS][nhom] = [];
-    khoViec[soGCS][nhom].push(c);
-  });
+    const khoViecObj = {};
+    caChuaGiao.forEach(c => {
+      const soGCS = c.so_gcs || 'Chưa rõ Sổ';
+      const nhom = c.nhom_phan_cong;
+      if (!khoViecObj[soGCS]) khoViecObj[soGCS] = {};
+      if (!khoViecObj[soGCS][nhom]) khoViecObj[soGCS][nhom] = [];
+      khoViecObj[soGCS][nhom].push(c);
+    });
 
-  // Tái tạo Giỏ Cá Nhân
-  const gioViec = {};
-  danhSachTho.forEach(tho => gioViec[tho.id] = []);
-  caDaGiaoCaNhan.forEach(c => {
-    const key = c.tho_id || c.nguoi_phu_trach; 
-    if (!gioViec[key]) gioViec[key] = [];
-    gioViec[key].push(c);
-  });
+    const gioViecObj = {};
+    danhSachTho.forEach(tho => gioViecObj[tho.id] = []);
+    caDaGiaoCaNhan.forEach(c => {
+      const key = c.tho_id || c.nguoi_phu_trach; 
+      if (!gioViecObj[key]) gioViecObj[key] = [];
+      gioViecObj[key].push(c);
+    });
 
-  // Tái tạo Giỏ Nhóm
-  const gioViecNhom = {};
-  danhSachNhom.forEach(nhom => gioViecNhom[nhom.ten_nhom] = []);
-  caDaGiaoNhom.forEach(c => {
-    const key = c.ten_nhom_phu_trach;
-    if (!gioViecNhom[key]) gioViecNhom[key] = [];
-    gioViecNhom[key].push(c);
-  });
+    const gioViecNhomObj = {};
+    danhSachNhom.forEach(nhom => gioViecNhomObj[nhom.ten_nhom] = []);
+    caDaGiaoNhom.forEach(c => {
+      const key = c.ten_nhom_phu_trach;
+      if (!gioViecNhomObj[key]) gioViecNhomObj[key] = [];
+      gioViecNhomObj[key].push(c);
+    });
+
+    return {
+      danhSachTienDoTho: Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
+      danhSachTienDoNhomHienThi: Object.values(tienDoNhomObj).filter(n => n.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
+      khoViec: khoViecObj, gioViec: gioViecObj, gioViecNhom: gioViecNhomObj, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom
+    };
+  }, [caHomNay, danhSachTho, danhSachNhom]);
 
   // 4. CHỨC NĂNG CHIA CA (Nhận truyền vào là Object Thợ thay vì tên)
   const handleGiaoCumTru = async (danhSachCa, thoObj) => {
