@@ -75,9 +75,8 @@ const getCurrentLocation = () => {
   });
 };
 
-export default function QuanLyDanhSach() {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
+export default function QuanLyDanhSach({ session, profile }) {
+  // MỚI: session và profile giờ nhận từ App.jsx qua props, không tự quản lý riêng nữa
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -125,24 +124,6 @@ export default function QuanLyDanhSach() {
     { id: 'hoan_tat', name: 'Đã Xong', icon: 'fa-check-double', color: 'bg-emerald-500' },
   ];
 
-  // ================= AUTH EFFECT =================
-  // TỰ ĐỘNG LƯU TAB VÀO BỘ NHỚ TRÌNH DUYỆT MỖI KHI CHUYỂN TAB
-  useEffect(() => {
-    if (activeTab) localStorage.setItem('evn_saved_tab', activeTab);
-  }, [activeTab]);
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else setIsAuthLoading(false);
-    });
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else { setProfile(null); setIsAuthLoading(false); }
-    });
-  }, []);
 
   // TỰ ĐỘNG XIN QUYỀN GPS NGAY LẦN ĐẦU TIÊN ĐĂNG NHẬP VÀO APP
   useEffect(() => {
@@ -158,42 +139,36 @@ export default function QuanLyDanhSach() {
     }
   }, [session]);
 
-  const fetchProfile = async (userId) => {
-    const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
-    if (!error && data) {
-      setProfile(data);
-      
-      // Khôi phục trí nhớ: Lấy Tab đã lưu trong máy ra kiểm tra
-      const savedTab = localStorage.getItem('evn_saved_tab');
-      // Kiểm tra xem nhân viên này có quyền xem cái Tab vừa được lưu không
-      const hasAccessToSavedTab = data.role === 'admin' || (data.tabs_access && data.tabs_access.includes(savedTab));
-      
-      if (savedTab && hasAccessToSavedTab) {
-        setActiveTab(savedTab); // Nếu hợp lệ, mở đúng tab lúc nãy đang xem
-      } else if (data.role === 'admin') {
-        setActiveTab('cho_xac_minh'); // Mặc định cho Admin nếu chưa có trí nhớ
-      } else if (data.tabs_access && data.tabs_access.length > 0) {
-        setActiveTab(data.tabs_access[0]); // Mặc định cho User nếu chưa có trí nhớ
-      }
+  // MỚI: Thay cho fetchProfile cũ - tự động chọn Tab mặc định khi profile (từ props) sẵn sàng
+  useEffect(() => {
+    if (!profile) return;
+    const savedTab = localStorage.getItem('evn_saved_tab');
+    const hasAccessToSavedTab = profile.role === 'admin' || (profile.tabs_access && profile.tabs_access.includes(savedTab));
+  
+    if (savedTab && hasAccessToSavedTab) {
+      setActiveTab(savedTab);
+    } else if (profile.role === 'admin') {
+      setActiveTab('cho_xac_minh');
+    } else if (profile.tabs_access && profile.tabs_access.length > 0) {
+      setActiveTab(profile.tabs_access[0]);
     }
-    setIsAuthLoading(false);
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault(); setLoading(true);
-    setActionModal({ isOpen: false, type: '', title: '' }); setActionImage(null);
-    setViewMode('list'); 
-    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-    if (error) toast.error('Đăng nhập thất bại: Kiểm tra lại tài khoản');
-    else toast.success('Đăng nhập thành công!');
-    setLoading(false);
-  };
-
-  const handleLogout = async () => {
-    setActionModal({ isOpen: false, type: '', title: '' }); setActionImage(null);
-    await supabase.auth.signOut();
-    setViewMode('list');
-  };
+  }, [profile]);
+  
+    const handleLogin = async (e) => {
+      e.preventDefault(); setLoading(true);
+      setActionModal({ isOpen: false, type: '', title: '' }); setActionImage(null);
+      setViewMode('list'); 
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) toast.error('Đăng nhập thất bại: Kiểm tra lại tài khoản');
+      else toast.success('Đăng nhập thành công!');
+      setLoading(false);
+    };
+  
+    const handleLogout = async () => {
+      setActionModal({ isOpen: false, type: '', title: '' }); setActionImage(null);
+      await supabase.auth.signOut();
+      setViewMode('list');
+    };
 
   // ================= QUẢN TRỊ ADMIN (THÊM, SỬA, XÓA) =================
   const fetchUsersList = async () => {
@@ -616,26 +591,6 @@ export default function QuanLyDanhSach() {
     return 0; 
   });
 
-  if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><i className="fa-solid fa-spinner fa-spin text-3xl text-blue-600"></i></div>;
-
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-        <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
-          <div className="text-center mb-8">
-            <div className="bg-blue-600 w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg"><i className="fa-solid fa-bolt text-2xl text-white"></i></div>
-            <h1 className="text-xl font-bold text-slate-800 uppercase tracking-wide">Điện Lực Châu Phú</h1>
-            <p className="text-xs text-slate-500 mt-1">Hệ thống điều hành hiện trường</p>
-          </div>
-          <div className="space-y-4">
-            <div className="relative"><i className="fa-solid fa-envelope absolute left-3 top-3.5 text-slate-400"></i><input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} className="w-full pl-9 pr-3 py-3 border border-slate-300 rounded-lg text-sm outline-none" placeholder="Email nội bộ" required /></div>
-            <div className="relative"><i className="fa-solid fa-lock absolute left-3 top-3.5 text-slate-400"></i><input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} className="w-full pl-9 pr-3 py-3 border border-slate-300 rounded-lg text-sm outline-none" placeholder="Mật khẩu" required /></div>
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-lg text-sm shadow-md">{loading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'ĐĂNG NHẬP'}</button>
-          </div>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-md mx-auto bg-slate-100 min-h-screen text-slate-800 font-sans pb-24 relative">
