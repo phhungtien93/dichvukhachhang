@@ -129,66 +129,79 @@ export default function PhanCongDashboard() {
 
   // HÀM: Giao ca vào Giỏ Nhóm
   const handleGiaoCaChoNhom = async (danhSachCa, nhomObj) => {
-    const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
+  const isoNow = new Date().toISOString();
+  const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
 
-    try {
-      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
-      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+  try {
+    const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
+    const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
 
-      const payloadBase = {
-        ten_nhom_phu_trach: nhomObj.ten_nhom,
-        ds_id_thanh_vien_nhom: nhomObj.thanh_vien_ids,
-        tho_id: null,           // Xóa dấu vết cá nhân
-        nguoi_phu_trach: null,  // Xóa dấu vết cá nhân
-        ngay_nap_du_lieu: isoNow
-      };
+    const payloadBase = {
+      ten_nhom_phu_trach: nhomObj.ten_nhom,
+      ds_id_thanh_vien_nhom: nhomObj.thanh_vien_ids,
+      tho_id: null,           // Xóa dấu vết cá nhân
+      nguoi_phu_trach: null,  // Xóa dấu vết cá nhân
+      ngay_nap_du_lieu: isoNow
+    };
 
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
-      }
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
-      toast.success(`Xong!`, { id: toastId });
-      fetchAllData(); 
-    } catch (error) {
-      toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
+    if (caThuongIds.length > 0) {
+      await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
     }
-  };
+    if (caBaoHenIds.length > 0) {
+      await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+    }
+
+    // MỚI: Cập nhật trực tiếp trong bộ nhớ, KHÔNG gọi fetchAllData() nữa -> phản hồi tức thì
+    setDanhSach(prev => prev.map(c => {
+      if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
+      if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+      return c;
+    }));
+
+    toast.success(`Xong!`, { id: toastId });
+  } catch (error) {
+    toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
+  }
+};
 
   // HÀM: Chuyển ca lẻ giữa các Nhóm
   const handleChuyenGiaoCaLeNhom = async (nhomNhanObj) => {
-    if (selectedMicroTasks.length === 0) return;
-    const isoNow = new Date().toISOString();
-    const toastId = toast.loading(`Chuyển ca sang ${nhomNhanObj.ten_nhom}...`);
-    
-    try {
-      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
-      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+  if (selectedMicroTasks.length === 0) return;
+  const isoNow = new Date().toISOString();
+  const toastId = toast.loading(`Chuyển ca sang ${nhomNhanObj.ten_nhom}...`);
+  
+  try {
+    const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+    const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
 
-      const payloadBase = {
-        ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
-        ds_id_thanh_vien_nhom: nhomNhanObj.thanh_vien_ids,
-        tho_id: null,
-        nguoi_phu_trach: null,
-        ngay_nap_du_lieu: isoNow
-      };
+    const payloadBase = {
+      ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
+      ds_id_thanh_vien_nhom: nhomNhanObj.thanh_vien_ids,
+      tho_id: null,
+      nguoi_phu_trach: null,
+      ngay_nap_du_lieu: isoNow
+    };
 
-      if (caThuongIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
-      }
-      if (caBaoHenIds.length > 0) {
-        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-      }
-      
-      setSelectedMicroTasks([]);
-      fetchAllData();
-      toast.success(`Thành công!`, { id: toastId });
-    } catch (error) {
-      toast.error('Lỗi điều chuyển nhóm', { id: toastId });
+    if (caThuongIds.length > 0) {
+      await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
     }
-  };
+    if (caBaoHenIds.length > 0) {
+      await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+    }
+
+    // MỚI: Cập nhật trực tiếp trong bộ nhớ thay vì tải lại từ server
+    setDanhSach(prev => prev.map(c => {
+      if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
+      if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+      return c;
+    }));
+    
+    setSelectedMicroTasks([]);
+    toast.success(`Thành công!`, { id: toastId });
+  } catch (error) {
+    toast.error('Lỗi điều chuyển nhóm', { id: toastId });
+  }
+};
 
   // === HÀM TÌM KIẾM LỊCH SỬ TỪ BẢNG LẠNH ===
   const handleSearchHistory = async (e) => {
