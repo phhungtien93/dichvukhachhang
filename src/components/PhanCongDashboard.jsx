@@ -1804,11 +1804,89 @@ export default function PhanCongDashboard() {
                    <i className="fa-solid fa-file-circle-question"></i> Chưa xử lý
                  </span>
                  <span className="text-2xl font-black text-blue-700 leading-none">{selectedWorkerProgress.chiTiet.chua_xu_ly}</span>
-               </div>
-            </div>
-          </div>
+               {/* ===== MỚI: POPUP "GIAO VIỆC CHO AI?" ===== */}
+{assignPopup && (
+  <div className="fixed inset-0 bg-slate-900/60 z-[130] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
+      <div className="p-4 border-b border-slate-100 bg-blue-50 flex justify-between items-center">
+        <div>
+          <h3 className="font-black text-blue-800 uppercase text-sm">Giao việc cho ai?</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">{assignPopup.title}</p>
         </div>
-      )}
+        <button onClick={() => setAssignPopup(null)} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="p-4 max-h-[320px] overflow-y-auto space-y-1.5">
+        {assignPopup.type === 'ca_nhan' ? (
+          danhSachTho.length === 0 ? (
+            <p className="text-xs text-slate-400 italic text-center py-4">Chưa có thợ nào</p>
+          ) : (
+            [...danhSachTho]
+              .sort((a, b) => (tienDoThoMap[a.id]?.tongCa || 0) - (tienDoThoMap[b.id]?.tongCa || 0))
+              .map(tho => {
+                const soCa = tienDoThoMap[tho.id]?.tongCa || 0;
+                const isSelected = assignPopup.selectedId === tho.id;
+                return (
+                  <button
+                    key={tho.id}
+                    onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: tho.id }))}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className={`text-[13px] font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{tho.ho_ten}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className={`text-[11px] ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>{soCa} ca</span>
+                      {isSelected && <i className="fa-solid fa-circle-check text-blue-500 text-sm"></i>}
+                    </span>
+                  </button>
+                );
+              })
+          )
+        ) : (
+          danhSachNhom.length === 0 ? (
+            <p className="text-xs text-slate-400 italic text-center py-4">Chưa có nhóm nào</p>
+          ) : (
+            [...danhSachNhom]
+              .sort((a, b) => (tienDoNhomMap[a.ten_nhom]?.tongCa || 0) - (tienDoNhomMap[b.ten_nhom]?.tongCa || 0))
+              .map(nhom => {
+                const soCa = tienDoNhomMap[nhom.ten_nhom]?.tongCa || 0;
+                const isSelected = assignPopup.selectedId === nhom.id;
+                return (
+                  <button
+                    key={nhom.id}
+                    onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: nhom.id }))}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className={`text-[13px] font-bold ${isSelected ? 'text-purple-700' : 'text-slate-700'}`}>
+                      <i className="fa-solid fa-users mr-1.5 text-[11px]"></i>{nhom.ten_nhom}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className={`text-[11px] ${isSelected ? 'text-purple-600' : 'text-slate-400'}`}>{soCa} ca</span>
+                      {isSelected && <i className="fa-solid fa-circle-check text-purple-500 text-sm"></i>}
+                    </span>
+                  </button>
+                );
+              })
+          )
+        )}
+      </div>
+
+      <div className="p-4 border-t border-slate-100 space-y-2">
+        <button
+          onClick={handleConfirmAssignPopup}
+          disabled={!assignPopup.selectedId}
+          className="w-full bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-all text-sm"
+        >
+          {assignPopup.selectedId
+            ? `Xác nhận giao cho ${assignPopup.type === 'ca_nhan' ? danhSachTho.find(t => t.id === assignPopup.selectedId)?.ho_ten : danhSachNhom.find(n => n.id === assignPopup.selectedId)?.ten_nhom}`
+            : 'Chọn 1 người/nhóm ở trên'}
+        </button>
+        <button onClick={() => setAssignPopup(null)} className="w-full bg-white border border-slate-200 text-slate-500 font-bold py-2.5 rounded-xl text-sm">
+          Huỷ
+        </button>
+      </div>
     </div>
-  );
+  </div>
+)}
 }
