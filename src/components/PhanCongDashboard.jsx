@@ -48,6 +48,11 @@ export default function PhanCongDashboard() {
   const [activeGroupCart, setActiveGroupCart] = useState(null); // Quản lý giỏ đang mở của nhóm
   const [isCreatingGroup, setIsCreatingGroup] = useState(false); 
   const [editingGroup, setEditingGroup] = useState(null); // BIẾN MỚI: Theo dõi xem có đang sửa nhóm nào không
+  const [editingGroup, setEditingGroup] = useState(null);
+
+  // ===== MỚI: STATE CHO POPUP "GIAO VIỆC CHO AI?" =====
+  // assignPopup = null khi đóng. Khi mở, chứa: danhSachCa (mảng ca cần giao), type ('ca_nhan' hoặc 'nhom'), title, selectedId
+  const [assignPopup, setAssignPopup] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState([]);
 
@@ -479,7 +484,7 @@ export default function PhanCongDashboard() {
   }, [caHomNay, quickSearchQuery]);
 
   // === THUẬT TOÁN TÍNH TIẾN ĐỘ & KHO VIỆC ===
-  const { danhSachTienDoTho, danhSachTienDoNhomHienThi, khoViec, gioViec, gioViecNhom, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom } = useMemo(() => {
+  const { danhSachTienDoTho, danhSachTienDoNhomHienThi, khoViec, gioViec, gioViecNhom, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom, tienDoThoMap, tienDoNhomMap } = useMemo(() => {
     // 1. Tiến độ thợ
     const tienDoTho = {};
     danhSachTho.forEach(tho => {
@@ -551,9 +556,33 @@ export default function PhanCongDashboard() {
     return {
       danhSachTienDoTho: Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
       danhSachTienDoNhomHienThi: Object.values(tienDoNhomObj).filter(n => n.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
-      khoViec: khoViecObj, gioViec: gioViecObj, gioViecNhom: gioViecNhomObj, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom
+      khoViec: khoViecObj, gioViec: gioViecObj, gioViecNhom: gioViecNhomObj, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom,
+      // MỚI: Xuất thêm 2 bảng đầy đủ (kể cả người 0 ca) để Popup Giao Việc dùng
+      tienDoThoMap: tienDoTho,
+      tienDoNhomMap: tienDoNhomObj
     };
   }, [caHomNay, danhSachTho, danhSachNhom]);
+
+    // ===== MỚI: 2 hàm điều khiển Popup "Giao việc cho ai?" =====
+
+  // Mở popup: nhận vào danh sách ca cần giao + loại (cá nhân/nhóm) + tiêu đề hiển thị
+  const openAssignPopup = (danhSachCa, type, title) => {
+    setAssignPopup({ danhSachCa, type, title, selectedId: null });
+  };
+
+  // Khi bấm "Xác nhận giao cho..." trong popup
+  const handleConfirmAssignPopup = () => {
+    if (!assignPopup || !assignPopup.selectedId) return;
+
+    if (assignPopup.type === 'ca_nhan') {
+      const thoObj = danhSachTho.find(t => t.id === assignPopup.selectedId);
+      if (thoObj) handleGiaoCumTru(assignPopup.danhSachCa, thoObj);
+    } else {
+      const nhomObj = danhSachNhom.find(n => n.id === assignPopup.selectedId);
+      if (nhomObj) handleGiaoCaChoNhom(assignPopup.danhSachCa, nhomObj);
+    }
+    setAssignPopup(null); // đóng popup sau khi giao xong
+  };
 
   // 4. CHỨC NĂNG CHIA CA (Nhận truyền vào là Object Thợ thay vì tên)
   const handleGiaoCumTru = async (danhSachCa, thoObj) => {
@@ -1303,39 +1332,17 @@ export default function PhanCongDashboard() {
                           </>
                         )}
 
-                        {/* RẼ NHÁNH IF: NÚT GIAO VIỆC NHANH TRỰC TIẾP */}
-                        <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">
-                          <i className="fa-solid fa-share mr-1"></i>
-                          {assignMode === 'ca_nhan' ? 'Chuyển nhanh cho Nv:' : 'Chuyển nhanh cho Nhóm:'}
-                        </span>
-                        
-                        {assignMode === 'ca_nhan' ? (
-                          danhSachTho.map(tho => (
-                            <button
-                              key={tho.id}
-                              onClick={() => handleGiaoCumTru([c], tho)}
-                              className="bg-white hover:bg-blue-500 border border-slate-200 hover:border-blue-600 text-slate-600 hover:text-white px-2 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                              title={`Bấm để giao ca này cho ${tho.ho_ten}`}
-                            >
-                              <i className="fa-solid fa-plus text-[8px]"></i> {tho.ho_ten}
-                            </button>
-                          ))
-                        ) : (
-                          danhSachNhom.length === 0 ? (
-                             <span className="text-[9px] text-slate-400 italic">Chưa có nhóm để giao</span>
-                          ) : (
-                            danhSachNhom.map(nhom => (
-                              <button
-                                key={nhom.id}
-                                onClick={() => handleGiaoCaChoNhom([c], nhom)}
-                                className="bg-purple-50 hover:bg-purple-600 border border-purple-200 hover:border-purple-700 text-purple-700 hover:text-white px-2 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                                title={`Bấm để giao ca này cho ${nhom.ten_nhom}`}
-                              >
-                                <i className="fa-solid fa-plus text-[8px]"></i> {nhom.ten_nhom}
-                              </button>
-                            ))
-                          )
-                        )}
+                        {/* MỚI: 1 nút duy nhất mở Popup "Giao việc cho ai?" thay cho cả dãy nút cũ */}
+                        <button
+                          onClick={() => openAssignPopup(
+                            [c],
+                            assignMode,
+                            `Giao ca: ${c.ten_kh || c.ma_pe || 'Khách hàng'}`
+                          )}
+                          className="bg-blue-50 hover:bg-blue-600 border border-blue-200 hover:border-blue-700 text-blue-700 hover:text-white px-2.5 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                        >
+                          <i className="fa-solid fa-share text-[8px]"></i> Giao việc
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1467,29 +1474,25 @@ export default function PhanCongDashboard() {
                           )}
                         </div>
 
-                        {assignMode === 'ca_nhan' ? (
-                          danhSachTho.map(tho => (
-                            <button 
-                              key={tho.id} 
-                              onClick={() => handleGiaoCumTru(danhSachCa, tho)}
-                              className="bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50 active:scale-95 px-2 py-1 rounded shadow-sm text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 flex-1 justify-center"
-                            >
-                              {tho.ho_ten} <span className="bg-slate-100 text-slate-400 px-1 rounded text-[8px]">{gioViec[tho.id]?.length || 0}</span>
-                            </button>
-                          ))
+                        {assignMode === 'nhom' && danhSachNhom.length === 0 ? (
+                          <span className="text-[10px] text-slate-400 italic w-full text-center py-1">Chưa có nhóm nào, hãy tạo nhóm!</span>
                         ) : (
-                          <>
-                            {danhSachNhom.length === 0 && <span className="text-[10px] text-slate-400 italic w-full text-center py-1">Chưa có nhóm nào, hãy tạo nhóm!</span>}
-                            {danhSachNhom.map(nhom => (
-                              <button 
-                                key={nhom.id} 
-                                onClick={() => handleGiaoCaChoNhom(danhSachCa, nhom)}
-                                className="bg-white border border-purple-200 hover:border-purple-600 hover:bg-purple-600 hover:text-white active:scale-95 px-2 py-1.5 rounded shadow-sm text-[10px] font-bold text-purple-700 transition-all flex items-center gap-1 flex-1 justify-center"
-                              >
-                                <i className="fa-solid fa-users"></i> {nhom.ten_nhom} <span className="bg-white/20 px-1 rounded text-[8px] ml-1">{gioViecNhom[nhom.ten_nhom]?.length || 0}</span>
-                              </button>
-                            ))}
-                          </>
+                          // MỚI: 1 nút duy nhất mở Popup "Giao việc cho ai?" cho cả khối Trạm/Tuyến này
+                          <button
+                            onClick={() => openAssignPopup(
+                              danhSachCa,
+                              assignMode,
+                              `Giao ${danhSachCa.length} ca`
+                            )}
+                            className={`w-full px-3 py-2 rounded-lg shadow-sm text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+                              assignMode === 'ca_nhan'
+                                ? 'bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white text-blue-700'
+                                : 'bg-purple-50 border border-purple-200 hover:bg-purple-600 hover:text-white text-purple-700'
+                            }`}
+                          >
+                            <i className="fa-solid fa-share"></i> Giao việc ({danhSachCa.length} ca)
+                          </button>
+                        )
                         )}
                       </div>
                     </div>
