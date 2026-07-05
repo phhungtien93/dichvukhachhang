@@ -1492,7 +1492,6 @@ export default function PhanCongDashboard() {
                           >
                             <i className="fa-solid fa-share"></i> Giao việc ({danhSachCa.length} ca)
                           </button>
-                        )
                         )}
                       </div>
                     </div>
@@ -1804,8 +1803,14 @@ export default function PhanCongDashboard() {
                    <i className="fa-solid fa-file-circle-question"></i> Chưa xử lý
                  </span>
                  <span className="text-2xl font-black text-blue-700 leading-none">{selectedWorkerProgress.chiTiet.chua_xu_ly}</span>
-               {/* ===== MỚI: POPUP "GIAO VIỆC CHO AI?" ===== */}
-{assignPopup && (
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MỚI: POPUP "GIAO VIỆC CHO AI?" ===== */}
+      {assignPopup && (
   <div className="fixed inset-0 bg-slate-900/60 z-[130] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
     <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
       <div className="p-4 border-b border-slate-100 bg-blue-50 flex justify-between items-center">
@@ -1889,4 +1894,6 @@ export default function PhanCongDashboard() {
     </div>
   </div>
 )}
+    </div>
+  );
 }
