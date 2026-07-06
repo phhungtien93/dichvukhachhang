@@ -15,6 +15,12 @@ export default function PhanCongDashboard() {
   
   const [activeWorkerCart, setActiveWorkerCart] = useState(null);
   const [selectedMicroTasks, setSelectedMicroTasks] = useState([]);
+
+  // ===== MỚI: State quản lý các ca CHƯA GIAO đang được tick chọn (dùng chung cho Tồn Đọng + Kho Việc) =====
+  const [selectedUnassignedIds, setSelectedUnassignedIds] = useState([]);
+  const toggleUnassigned = (id) => {
+    setSelectedUnassignedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
   const fileInputRef = useRef(null);
 
   // === CHÈN THÊM ĐOẠN NÀY ===
@@ -578,6 +584,7 @@ export default function PhanCongDashboard() {
       const nhomObj = danhSachNhom.find(n => n.id === assignPopup.selectedId);
       if (nhomObj) handleGiaoCaChoNhom(assignPopup.danhSachCa, nhomObj);
     }
+    setSelectedUnassignedIds([]); // MỚI: xoá tick chọn sau khi đã giao xong
     setAssignPopup(null); // đóng popup sau khi giao xong
   };
 
@@ -765,6 +772,33 @@ export default function PhanCongDashboard() {
              <i className="fa-solid fa-clock-rotate-left"></i> LỊCH SỬ PHÂN CÔNG
            </button>
         </div>
+
+        {/* MỚI: THANH NỔI "GIAO VIỆC ĐÃ CHỌN" - chỉ hiện khi có ca đang được tick chọn (Tồn Đọng hoặc Kho Việc) */}
+        {mainTab === 'phan_cong' && selectedUnassignedIds.length > 0 && (
+          <div className="sticky top-1 z-20 bg-blue-600 text-white rounded-xl shadow-lg p-2.5 flex items-center justify-between fade-in">
+            <span className="text-[11px] font-black pl-1">
+              <i className="fa-solid fa-square-check mr-1.5"></i>{selectedUnassignedIds.length} ca đã chọn
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setSelectedUnassignedIds([])}
+                className="bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
+              >
+                Huỷ chọn
+              </button>
+              <button
+                onClick={() => openAssignPopup(
+                  danhSach.filter(c => selectedUnassignedIds.includes(c.id)),
+                  assignMode,
+                  `Giao lẻ ${selectedUnassignedIds.length} ca đã chọn`
+                )}
+                className="bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm active:scale-95 transition-all flex items-center gap-1"
+              >
+                <i className="fa-solid fa-share"></i> Giao việc
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* NẾU ĐANG Ở TAB LỊCH SỬ -> HIỂN THỊ GIAO DIỆN TÌM KIẾM */}
         {mainTab === 'lich_su' && (
@@ -1277,10 +1311,16 @@ export default function PhanCongDashboard() {
                 {/* Chi tiết danh sách hàng tồn */}
                 <div className="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar pt-1">
                   {danhSachTonDongHienThi.map(c => (
-                    <div key={c.id} className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1 text-[10px] slide-up">
+                    <div key={c.id} className={`bg-white p-2 rounded-lg border shadow-sm flex flex-col gap-1 text-[10px] slide-up transition-colors ${selectedUnassignedIds.includes(c.id) ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/40' : 'border-slate-200'}`}>
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-800 truncate max-w-[150px]">{c.ten_kh}</span>
-                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[8px] font-black border border-slate-200 uppercase">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* MỚI: Checkbox chọn nhiều ca để giao cùng lúc */}
+                          <button onClick={() => toggleUnassigned(c.id)} className="shrink-0 text-base leading-none">
+                            <i className={`fa-regular ${selectedUnassignedIds.includes(c.id) ? 'fa-square-check text-blue-600' : 'fa-square text-slate-300'}`}></i>
+                          </button>
+                          <span className="font-bold text-slate-800 truncate max-w-[150px]">{c.ten_kh}</span>
+                        </div>
+                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[8px] font-black border border-slate-200 uppercase shrink-0">
                           Cũ: {c.nguoi_phu_trach || 'Chưa giao'}
                         </span>
                       </div>
@@ -1305,41 +1345,23 @@ export default function PhanCongDashboard() {
                         <span className="font-mono text-slate-400 font-bold"><i className="fa-solid fa-location-dot mr-1"></i>{c.ma_tru_sach}</span>
                       </div>
 
-                      {/* CÁC NÚT TÁC NGHIỆP TÙY THEO TAB TỒN ĐỌNG */}
-                      <div className="flex gap-1 mt-1.5 border-t border-slate-100 pt-1.5 overflow-x-auto no-scrollbar items-center">
-                        
-                        {/* Nút Xử lý trực tiếp (Chỉ dành cho Đội trưởng ở tab Khách hẹn lại) */}
-                        {backlogTab === 'hen_lai' && (
-                          <>
-                            <button
-                              onClick={() => handleDoiTruongXuLyTonDong(c, 'da_thu')}
-                              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
-                            >
-                              <i className="fa-solid fa-check"></i> CHỐT ĐÃ THU
-                            </button>
-                            <button
-                              onClick={() => handleDoiTruongXuLyTonDong(c, 'da_chuyen_cat_dien')}
-                              className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
-                            >
-                              <i className="fa-solid fa-scissors"></i> CHUYỂN CẮT ĐIỆN
-                            </button>
-                            {/* Dấu gạch đứng ngăn cách */}
-                            <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0"></div>
-                          </>
-                        )}
-
-                        {/* 1 nút duy nhất mở Popup "Giao việc cho ai?" thay cho cả dãy nút cũ */}
-                        <button
-                          onClick={() => openAssignPopup(
-                            [c],
-                            assignMode,
-                            `Giao ca: ${c.ten_kh || c.ma_pe || 'Khách hàng'}`
-                          )}
-                          className="bg-blue-50 hover:bg-blue-600 border border-blue-200 hover:border-blue-700 text-blue-700 hover:text-white px-2.5 py-1 rounded text-[9px] font-bold shrink-0 transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                        >
-                          <i className="fa-solid fa-share text-[8px]"></i> Giao việc
-                        </button>
-                      </div>
+                      {/* CÁC NÚT TÁC NGHIỆP TÙY THEO TAB TỒN ĐỌNG (chỉ còn thao tác Đội trưởng, nút Giao việc đã gộp xuống thanh nổi phía dưới) */}
+                      {backlogTab === 'hen_lai' && (
+                        <div className="flex gap-1 mt-1.5 border-t border-slate-100 pt-1.5 overflow-x-auto no-scrollbar items-center">
+                          <button
+                            onClick={() => handleDoiTruongXuLyTonDong(c, 'da_thu')}
+                            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
+                          >
+                            <i className="fa-solid fa-check"></i> CHỐT ĐÃ THU
+                          </button>
+                          <button
+                            onClick={() => handleDoiTruongXuLyTonDong(c, 'da_chuyen_cat_dien')}
+                            className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 px-2 py-1.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1 transition-colors"
+                          >
+                            <i className="fa-solid fa-scissors"></i> CHUYỂN CẮT ĐIỆN
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1404,9 +1426,14 @@ export default function PhanCongDashboard() {
                       {isExpanded && (
                         <div className={`mb-3 pt-2 border-t border-dashed space-y-1.5 ${isTram ? 'border-amber-200' : 'border-blue-200'}`}>
                           {danhSachCa.map(ca => (
-                            <div key={ca.id} className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-[10px] slide-up">
-                              {/* Dòng 1: Tên Khách hàng */}
-                              <div className="font-bold text-slate-800 truncate mb-1.5 text-[11px]">{ca.ten_kh}</div>
+                            <div key={ca.id} className={`bg-white p-2 rounded-lg border shadow-sm text-[10px] slide-up transition-colors ${selectedUnassignedIds.includes(ca.id) ? 'border-blue-400 ring-1 ring-blue-400 bg-blue-50/40' : 'border-slate-100'}`}>
+                              {/* Dòng 1: Checkbox + Tên Khách hàng */}
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <button onClick={() => toggleUnassigned(ca.id)} className="shrink-0 text-base leading-none">
+                                  <i className={`fa-regular ${selectedUnassignedIds.includes(ca.id) ? 'fa-square-check text-blue-600' : 'fa-square text-slate-300'}`}></i>
+                                </button>
+                                <div className="font-bold text-slate-800 truncate text-[11px]">{ca.ten_kh}</div>
+                              </div>
                               
                               {/* Dòng 2: Mã PE | SĐT | Trụ */}
                               <div className="flex justify-between items-center text-slate-500">
