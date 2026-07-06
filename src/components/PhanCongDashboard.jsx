@@ -773,32 +773,7 @@ export default function PhanCongDashboard() {
            </button>
         </div>
 
-        {/* MỚI: THANH NỔI "GIAO VIỆC ĐÃ CHỌN" - chỉ hiện khi có ca đang được tick chọn (Tồn Đọng hoặc Kho Việc) */}
-        {mainTab === 'phan_cong' && selectedUnassignedIds.length > 0 && (
-          <div className="sticky top-1 z-20 bg-blue-600 text-white rounded-xl shadow-lg p-2.5 flex items-center justify-between fade-in">
-            <span className="text-[11px] font-black pl-1">
-              <i className="fa-solid fa-square-check mr-1.5"></i>{selectedUnassignedIds.length} ca đã chọn
-            </span>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => setSelectedUnassignedIds([])}
-                className="bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
-              >
-                Huỷ chọn
-              </button>
-              <button
-                onClick={() => openAssignPopup(
-                  danhSach.filter(c => selectedUnassignedIds.includes(c.id)),
-                  assignMode,
-                  `Giao lẻ ${selectedUnassignedIds.length} ca đã chọn`
-                )}
-                className="bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm active:scale-95 transition-all flex items-center gap-1"
-              >
-                <i className="fa-solid fa-share"></i> Giao việc
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Thanh "Giao việc đã chọn" đã chuyển xuống ngoài vùng cuộn, đặt ngay trên Giỏ hàng (xem phía dưới) */}
 
         {/* NẾU ĐANG Ở TAB LỊCH SỬ -> HIỂN THỊ GIAO DIỆN TÌM KIẾM */}
         {mainTab === 'lich_su' && (
@@ -1510,6 +1485,33 @@ export default function PhanCongDashboard() {
         )}
       </div>
 
+      {/* MỚI: THANH "GIAO VIỆC ĐÃ CHỌN" - đặt NGOÀI vùng cuộn, ngay trên Giỏ hàng -> tuyệt đối không bị cuộn mất */}
+      {mainTab === 'phan_cong' && selectedUnassignedIds.length > 0 && (
+        <div className="bg-blue-600 text-white p-2.5 flex items-center justify-between shrink-0 shadow-[0_-4px_10px_-2px_rgba(0,0,0,0.15)] z-40 relative fade-in">
+          <span className="text-[11px] font-black pl-1">
+            <i className="fa-solid fa-square-check mr-1.5"></i>{selectedUnassignedIds.length} ca đã chọn
+          </span>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setSelectedUnassignedIds([])}
+              className="bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
+            >
+              Huỷ chọn
+            </button>
+            <button
+              onClick={() => openAssignPopup(
+                danhSach.filter(c => selectedUnassignedIds.includes(c.id)),
+                assignMode,
+                `Giao lẻ ${selectedUnassignedIds.length} ca đã chọn`
+              )}
+              className="bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm active:scale-95 transition-all flex items-center gap-1"
+            >
+              <i className="fa-solid fa-share"></i> Giao việc
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* KHU VỰC GIỎ HÀNG (ĐƯỢC BỌC TRONG IF/ELSE KHỔNG LỒ NHƯ THẢO LUẬN) */}
       {mainTab === 'phan_cong' && (
         <div className="bg-white border-t border-slate-200 rounded-t-2xl shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.05)] mt-auto z-40 transition-all duration-300 relative shrink-0">
@@ -1840,6 +1842,19 @@ export default function PhanCongDashboard() {
               <button onClick={() => setAssignPopup(null)} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
                 <i className="fa-solid fa-xmark"></i>
               </button>
+            </div>
+
+            {/* MỚI: Khối "Danh sách đã chọn" - liệt kê lại các ca sắp giao để xác nhận trước khi chọn người */}
+            <div className="px-4 pt-3 pb-1 border-b border-slate-100 bg-slate-50/60">
+              <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Danh sách đã chọn ({assignPopup.danhSachCa.length})</p>
+              <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                {assignPopup.danhSachCa.map(c => (
+                  <div key={c.id} className="text-[11px] text-slate-600 flex justify-between gap-2">
+                    <span className="truncate">{c.ten_kh}</span>
+                    <span className="font-mono text-slate-400 shrink-0">{c.ma_pe}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="p-4 max-h-[320px] overflow-y-auto space-y-1.5">
