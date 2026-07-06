@@ -102,18 +102,19 @@ export default function GiaoDienTho({ session, profile }) {
   // HÀM XỬ LÝ KỊCH BẢN (GIỮ NGUYÊN 100% CỦA BẠN)
   // ==========================================
   const handleXuLyKichBan = async (ca, kichBan, trangThaiMoi) => {
-    let ghiChu = '';
-    
-    if (kichBan === 'HẸN LẠI') {
-      ghiChu = prompt('Nhập thời gian/lý do khách hẹn lại (VD: 17h chiều mai đóng):');
-      if (ghiChu === null) return; 
-    }
+  let ghiChu = '';
+  let checkKh = null; // MỚI: khai báo ở đây để dùng được xuyên suốt cả hàm, không bị mất phạm vi
 
-    const toastId = toast.loading(`Đang xử lý kịch bản: ${kichBan}...`);
-    try {
-      if (trangThaiMoi !== 'da_thu') {
-        const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
-        const checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
+  if (kichBan === 'HẸN LẠI') {
+    ghiChu = prompt('Nhập thời gian/lý do khách hẹn lại (VD: 17h chiều mai đóng):');
+    if (ghiChu === null) return; 
+  }
+
+  const toastId = toast.loading(`Đang xử lý kịch bản: ${kichBan}...`);
+  try {
+    if (trangThaiMoi !== 'da_thu') {
+      const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
+        checkKh = checkKhList && checkKhList.length > 0 ? checkKhList[0] : null;
         
         const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
         
