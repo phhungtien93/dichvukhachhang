@@ -48,10 +48,9 @@ export default function PhanCongDashboard() {
   const [activeGroupCart, setActiveGroupCart] = useState(null); // Quản lý giỏ đang mở của nhóm
   const [isCreatingGroup, setIsCreatingGroup] = useState(false); 
   const [editingGroup, setEditingGroup] = useState(null); // BIẾN MỚI: Theo dõi xem có đang sửa nhóm nào không
-  const [editingGroup, setEditingGroup] = useState(null);
 
   // ===== MỚI: STATE CHO POPUP "GIAO VIỆC CHO AI?" =====
-  // assignPopup = null khi đóng. Khi mở, chứa: danhSachCa (mảng ca cần giao), type ('ca_nhan' hoặc 'nhom'), title, selectedId
+  // assignPopup = null khi đóng. Khi mở, chứa: danhSachCa (mảng ca cần giao), type ('ca_nhan' hoặc 'theo_nhom'), title, selectedId
   const [assignPopup, setAssignPopup] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState([]);
@@ -134,79 +133,79 @@ export default function PhanCongDashboard() {
 
   // HÀM: Giao ca vào Giỏ Nhóm
   const handleGiaoCaChoNhom = async (danhSachCa, nhomObj) => {
-  const isoNow = new Date().toISOString();
-  const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Giao ${danhSachCa.length} ca cho ${nhomObj.ten_nhom}...`);
 
-  try {
-    const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
-    const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+    try {
+      const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
+      const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
 
-    const payloadBase = {
-      ten_nhom_phu_trach: nhomObj.ten_nhom,
-      ds_id_thanh_vien_nhom: nhomObj.thanh_vien_ids,
-      tho_id: null,           // Xóa dấu vết cá nhân
-      nguoi_phu_trach: null,  // Xóa dấu vết cá nhân
-      ngay_nap_du_lieu: isoNow
-    };
+      const payloadBase = {
+        ten_nhom_phu_trach: nhomObj.ten_nhom,
+        ds_id_thanh_vien_nhom: nhomObj.thanh_vien_ids,
+        tho_id: null,           // Xóa dấu vết cá nhân
+        nguoi_phu_trach: null,  // Xóa dấu vết cá nhân
+        ngay_nap_du_lieu: isoNow
+      };
 
-    if (caThuongIds.length > 0) {
-      await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
+
+      // MỚI: Cập nhật trực tiếp trong bộ nhớ, KHÔNG gọi fetchAllData() nữa -> phản hồi tức thì
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
+        if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
+
+      toast.success(`Xong!`, { id: toastId });
+    } catch (error) {
+      toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
     }
-    if (caBaoHenIds.length > 0) {
-      await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-    }
-
-    // MỚI: Cập nhật trực tiếp trong bộ nhớ, KHÔNG gọi fetchAllData() nữa -> phản hồi tức thì
-    setDanhSach(prev => prev.map(c => {
-      if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
-      if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
-      return c;
-    }));
-
-    toast.success(`Xong!`, { id: toastId });
-  } catch (error) {
-    toast.error('Lỗi khi phân công cho nhóm', { id: toastId });
-  }
-};
+  };
 
   // HÀM: Chuyển ca lẻ giữa các Nhóm
   const handleChuyenGiaoCaLeNhom = async (nhomNhanObj) => {
-  if (selectedMicroTasks.length === 0) return;
-  const isoNow = new Date().toISOString();
-  const toastId = toast.loading(`Chuyển ca sang ${nhomNhanObj.ten_nhom}...`);
-  
-  try {
-    const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
-    const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
-
-    const payloadBase = {
-      ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
-      ds_id_thanh_vien_nhom: nhomNhanObj.thanh_vien_ids,
-      tho_id: null,
-      nguoi_phu_trach: null,
-      ngay_nap_du_lieu: isoNow
-    };
-
-    if (caThuongIds.length > 0) {
-      await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
-    }
-    if (caBaoHenIds.length > 0) {
-      await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
-    }
-
-    // MỚI: Cập nhật trực tiếp trong bộ nhớ thay vì tải lại từ server
-    setDanhSach(prev => prev.map(c => {
-      if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
-      if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
-      return c;
-    }));
+    if (selectedMicroTasks.length === 0) return;
+    const isoNow = new Date().toISOString();
+    const toastId = toast.loading(`Chuyển ca sang ${nhomNhanObj.ten_nhom}...`);
     
-    setSelectedMicroTasks([]);
-    toast.success(`Thành công!`, { id: toastId });
-  } catch (error) {
-    toast.error('Lỗi điều chuyển nhóm', { id: toastId });
-  }
-};
+    try {
+      const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
+      const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+
+      const payloadBase = {
+        ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
+        ds_id_thanh_vien_nhom: nhomNhanObj.thanh_vien_ids,
+        tho_id: null,
+        nguoi_phu_trach: null,
+        ngay_nap_du_lieu: isoNow
+      };
+
+      if (caThuongIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update(payloadBase).in('id', caThuongIds).eq('is_active', true);
+      }
+      if (caBaoHenIds.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
+      }
+
+      // MỚI: Cập nhật trực tiếp trong bộ nhớ thay vì tải lại từ server
+      setDanhSach(prev => prev.map(c => {
+        if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
+        if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+        return c;
+      }));
+      
+      setSelectedMicroTasks([]);
+      toast.success(`Thành công!`, { id: toastId });
+    } catch (error) {
+      toast.error('Lỗi điều chuyển nhóm', { id: toastId });
+    }
+  };
 
   // === HÀM TÌM KIẾM LỊCH SỬ TỪ BẢNG LẠNH ===
   const handleSearchHistory = async (e) => {
@@ -240,42 +239,40 @@ export default function PhanCongDashboard() {
   
   // 1. TẢI DỮ LIỆU TỪ SUPABASE
   const fetchAllData = async () => {
-  setLoading(true);
-  try {
-    // MỚI: Gộp cả 5 lượt gọi Supabase để chạy SONG SONG cùng lúc bằng Promise.all
-    // Thay vì chờ tuần tự (query 1 xong mới chạy query 2...), giờ cả 5 chạy đồng thời
-    // => tổng thời gian tải = thời gian của lượt CHẬM NHẤT, thay vì cộng dồn cả 5 lượt
-    const [
-      { data: userData },
-      { data: nhomData },
-      { data: tramData },
-      { data: tienToData },
-      { data: dsData, error: dsErr }
-    ] = await Promise.all([
-      supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten'),
-      supabase.from('danh_sach_nhom').select('*').order('ten_nhom'),
-      supabase.from('danh_muc_tram').select('*'),
-      supabase.from('danh_muc_ma_xuat_tuyen').select('*'),
-      supabase
-        .from('danh_sach_doc_thu')
-        .select('*')
-        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
-        .eq('is_active', true)
-    ]);
+    setLoading(true);
+    try {
+      // Gộp cả 5 lượt gọi Supabase để chạy SONG SONG cùng lúc bằng Promise.all
+      const [
+        { data: userData },
+        { data: nhomData },
+        { data: tramData },
+        { data: tienToData },
+        { data: dsData, error: dsErr }
+      ] = await Promise.all([
+        supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten'),
+        supabase.from('danh_sach_nhom').select('*').order('ten_nhom'),
+        supabase.from('danh_muc_tram').select('*'),
+        supabase.from('danh_muc_ma_xuat_tuyen').select('*'),
+        supabase
+          .from('danh_sach_doc_thu')
+          .select('*')
+          .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
+          .eq('is_active', true)
+      ]);
 
-    if (dsErr) throw dsErr;
+      if (dsErr) throw dsErr;
 
-    setDanhSachTho(userData || []);
-    setDanhSachNhom(nhomData || []);
-    setDanhMucTram(tramData || []);
-    setDanhMucTienTo(tienToData || []);
-    setDanhSach(dsData || []);
-  } catch (error) {
-    toast.error('Lỗi kết nối cơ sở dữ liệu!');
-  } finally {
-    setLoading(false);
-  }
-};
+      setDanhSachTho(userData || []);
+      setDanhSachNhom(nhomData || []);
+      setDanhMucTram(tramData || []);
+      setDanhMucTienTo(tienToData || []);
+      setDanhSach(dsData || []);
+    } catch (error) {
+      toast.error('Lỗi kết nối cơ sở dữ liệu!');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchAllData();
@@ -557,13 +554,13 @@ export default function PhanCongDashboard() {
       danhSachTienDoTho: Object.values(tienDoTho).filter(t => t.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
       danhSachTienDoNhomHienThi: Object.values(tienDoNhomObj).filter(n => n.tongCa > 0).sort((a,b) => b.tongCa - a.tongCa),
       khoViec: khoViecObj, gioViec: gioViecObj, gioViecNhom: gioViecNhomObj, caChuaGiao, caDaGiaoCaNhan, caDaGiaoNhom,
-      // MỚI: Xuất thêm 2 bảng đầy đủ (kể cả người 0 ca) để Popup Giao Việc dùng
+      // Xuất thêm 2 bảng đầy đủ (kể cả người 0 ca) để Popup Giao Việc dùng
       tienDoThoMap: tienDoTho,
       tienDoNhomMap: tienDoNhomObj
     };
   }, [caHomNay, danhSachTho, danhSachNhom]);
 
-    // ===== MỚI: 2 hàm điều khiển Popup "Giao việc cho ai?" =====
+  // ===== 2 hàm điều khiển Popup "Giao việc cho ai?" =====
 
   // Mở popup: nhận vào danh sách ca cần giao + loại (cá nhân/nhóm) + tiêu đề hiển thị
   const openAssignPopup = (danhSachCa, type, title) => {
@@ -706,7 +703,6 @@ export default function PhanCongDashboard() {
     }
   };
 
-  // BỔ SUNG LỆNH RETURN BỊ THIẾU Ở ĐÂY
   return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in relative">
       <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
@@ -1332,7 +1328,7 @@ export default function PhanCongDashboard() {
                           </>
                         )}
 
-                        {/* MỚI: 1 nút duy nhất mở Popup "Giao việc cho ai?" thay cho cả dãy nút cũ */}
+                        {/* 1 nút duy nhất mở Popup "Giao việc cho ai?" thay cho cả dãy nút cũ */}
                         <button
                           onClick={() => openAssignPopup(
                             [c],
@@ -1455,29 +1451,11 @@ export default function PhanCongDashboard() {
                         </div>
                       )}
                       
-                      {/* RẼ NHÁNH IF: CÁC NÚT ĐẨY VÀO GIỎ KHO VIỆC */}
+                      {/* RẼ NHÁNH IF: 1 nút duy nhất mở Popup "Giao việc cho ai?" cho cả khối Trạm/Tuyến này */}
                       <div className={`flex flex-wrap gap-1.5 border-t pt-2 mt-1 ${isTram ? 'border-amber-100' : 'border-blue-100'}`}>
-                        <div className="flex justify-between items-center w-full mb-0.5">
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">Đẩy nhanh vào giỏ:</span>
-                          {assignMode === 'theo_nhom' && (
-                            <button 
-                              onClick={() => {
-                                setEditingGroup(null); // Đảm bảo là chế độ Tạo Mới
-                                setNewGroupName('');
-                                setNewGroupMembers([]);
-                                setIsCreatingGroup(true);
-                              }} 
-                              className="text-[9px] font-black text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-full transition-colors active:scale-95"
-                            >
-                              + Tạo Tổ/Nhóm
-                            </button>
-                          )}
-                        </div>
-
-                        {assignMode === 'nhom' && danhSachNhom.length === 0 ? (
-                          <span className="text-[10px] text-slate-400 italic w-full text-center py-1">Chưa có nhóm nào, hãy tạo nhóm!</span>
+                        {assignMode === 'theo_nhom' && danhSachNhom.length === 0 ? (
+                          <span className="text-[10px] text-slate-400 italic w-full text-center py-1">Chưa có nhóm nào — bấm "+ Tạo Tổ/Nhóm" ở khu Giỏ Của Nhóm bên dưới để lập nhóm mới!</span>
                         ) : (
-                          // MỚI: 1 nút duy nhất mở Popup "Giao việc cho ai?" cho cả khối Trạm/Tuyến này
                           <button
                             onClick={() => openAssignPopup(
                               danhSachCa,
@@ -1594,7 +1572,21 @@ export default function PhanCongDashboard() {
               <div className="px-4 pb-2">
                 <h3 className="text-xs font-bold text-purple-800 uppercase flex items-center justify-between mb-3">
                   <span><i className="fa-solid fa-people-group text-purple-600 mr-1"></i> Giỏ Của Nhóm</span>
-                  <span className="bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full text-[9px]">{caDaGiaoNhom.length} Đã giao</span>
+                  <div className="flex items-center gap-2">
+                    {/* MỚI: Nút "+ Tạo Tổ/Nhóm" chuyển từ khu Kho Việc xuống đây - luôn hiện, không phụ thuộc có ca mới hay không */}
+                    <button 
+                      onClick={() => {
+                        setEditingGroup(null); // Đảm bảo là chế độ Tạo Mới
+                        setNewGroupName('');
+                        setNewGroupMembers([]);
+                        setIsCreatingGroup(true);
+                      }} 
+                      className="text-[9px] font-black text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-full transition-colors active:scale-95"
+                    >
+                      + Tạo Tổ/Nhóm
+                    </button>
+                    <span className="bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full text-[9px]">{caDaGiaoNhom.length} Đã giao</span>
+                  </div>
                 </h3>
                 
                 <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto no-scrollbar pb-4">
@@ -1809,91 +1801,91 @@ export default function PhanCongDashboard() {
         </div>
       )}
 
-      {/* ===== MỚI: POPUP "GIAO VIỆC CHO AI?" ===== */}
+      {/* ================= POPUP "GIAO VIỆC CHO AI?" ================= */}
       {assignPopup && (
-  <div className="fixed inset-0 bg-slate-900/60 z-[130] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
-    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
-      <div className="p-4 border-b border-slate-100 bg-blue-50 flex justify-between items-center">
-        <div>
-          <h3 className="font-black text-blue-800 uppercase text-sm">Giao việc cho ai?</h3>
-          <p className="text-[11px] text-slate-500 mt-0.5">{assignPopup.title}</p>
+        <div className="fixed inset-0 bg-slate-900/60 z-[130] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up">
+            <div className="p-4 border-b border-slate-100 bg-blue-50 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-blue-800 uppercase text-sm">Giao việc cho ai?</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">{assignPopup.title}</p>
+              </div>
+              <button onClick={() => setAssignPopup(null)} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[320px] overflow-y-auto space-y-1.5">
+              {assignPopup.type === 'ca_nhan' ? (
+                danhSachTho.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Chưa có thợ nào</p>
+                ) : (
+                  [...danhSachTho]
+                    .sort((a, b) => (tienDoThoMap[a.id]?.tongCa || 0) - (tienDoThoMap[b.id]?.tongCa || 0))
+                    .map(tho => {
+                      const soCa = tienDoThoMap[tho.id]?.tongCa || 0;
+                      const isSelected = assignPopup.selectedId === tho.id;
+                      return (
+                        <button
+                          key={tho.id}
+                          onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: tho.id }))}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <span className={`text-[13px] font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{tho.ho_ten}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className={`text-[11px] ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>{soCa} ca</span>
+                            {isSelected && <i className="fa-solid fa-circle-check text-blue-500 text-sm"></i>}
+                          </span>
+                        </button>
+                      );
+                    })
+                )
+              ) : (
+                danhSachNhom.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Chưa có nhóm nào</p>
+                ) : (
+                  [...danhSachNhom]
+                    .sort((a, b) => (tienDoNhomMap[a.ten_nhom]?.tongCa || 0) - (tienDoNhomMap[b.ten_nhom]?.tongCa || 0))
+                    .map(nhom => {
+                      const soCa = tienDoNhomMap[nhom.ten_nhom]?.tongCa || 0;
+                      const isSelected = assignPopup.selectedId === nhom.id;
+                      return (
+                        <button
+                          key={nhom.id}
+                          onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: nhom.id }))}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <span className={`text-[13px] font-bold ${isSelected ? 'text-purple-700' : 'text-slate-700'}`}>
+                            <i className="fa-solid fa-users mr-1.5 text-[11px]"></i>{nhom.ten_nhom}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span className={`text-[11px] ${isSelected ? 'text-purple-600' : 'text-slate-400'}`}>{soCa} ca</span>
+                            {isSelected && <i className="fa-solid fa-circle-check text-purple-500 text-sm"></i>}
+                          </span>
+                        </button>
+                      );
+                    })
+                )
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 space-y-2">
+              <button
+                onClick={handleConfirmAssignPopup}
+                disabled={!assignPopup.selectedId}
+                className="w-full bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-all text-sm"
+              >
+                {assignPopup.selectedId
+                  ? `Xác nhận giao cho ${assignPopup.type === 'ca_nhan' ? danhSachTho.find(t => t.id === assignPopup.selectedId)?.ho_ten : danhSachNhom.find(n => n.id === assignPopup.selectedId)?.ten_nhom}`
+                  : 'Chọn 1 người/nhóm ở trên'}
+              </button>
+              <button onClick={() => setAssignPopup(null)} className="w-full bg-white border border-slate-200 text-slate-500 font-bold py-2.5 rounded-xl text-sm">
+                Huỷ
+              </button>
+            </div>
+          </div>
         </div>
-        <button onClick={() => setAssignPopup(null)} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
-          <i className="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <div className="p-4 max-h-[320px] overflow-y-auto space-y-1.5">
-        {assignPopup.type === 'ca_nhan' ? (
-          danhSachTho.length === 0 ? (
-            <p className="text-xs text-slate-400 italic text-center py-4">Chưa có thợ nào</p>
-          ) : (
-            [...danhSachTho]
-              .sort((a, b) => (tienDoThoMap[a.id]?.tongCa || 0) - (tienDoThoMap[b.id]?.tongCa || 0))
-              .map(tho => {
-                const soCa = tienDoThoMap[tho.id]?.tongCa || 0;
-                const isSelected = assignPopup.selectedId === tho.id;
-                return (
-                  <button
-                    key={tho.id}
-                    onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: tho.id }))}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <span className={`text-[13px] font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{tho.ho_ten}</span>
-                    <span className="flex items-center gap-1.5">
-                      <span className={`text-[11px] ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>{soCa} ca</span>
-                      {isSelected && <i className="fa-solid fa-circle-check text-blue-500 text-sm"></i>}
-                    </span>
-                  </button>
-                );
-              })
-          )
-        ) : (
-          danhSachNhom.length === 0 ? (
-            <p className="text-xs text-slate-400 italic text-center py-4">Chưa có nhóm nào</p>
-          ) : (
-            [...danhSachNhom]
-              .sort((a, b) => (tienDoNhomMap[a.ten_nhom]?.tongCa || 0) - (tienDoNhomMap[b.ten_nhom]?.tongCa || 0))
-              .map(nhom => {
-                const soCa = tienDoNhomMap[nhom.ten_nhom]?.tongCa || 0;
-                const isSelected = assignPopup.selectedId === nhom.id;
-                return (
-                  <button
-                    key={nhom.id}
-                    onClick={() => setAssignPopup(prev => ({ ...prev, selectedId: nhom.id }))}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <span className={`text-[13px] font-bold ${isSelected ? 'text-purple-700' : 'text-slate-700'}`}>
-                      <i className="fa-solid fa-users mr-1.5 text-[11px]"></i>{nhom.ten_nhom}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className={`text-[11px] ${isSelected ? 'text-purple-600' : 'text-slate-400'}`}>{soCa} ca</span>
-                      {isSelected && <i className="fa-solid fa-circle-check text-purple-500 text-sm"></i>}
-                    </span>
-                  </button>
-                );
-              })
-          )
-        )}
-      </div>
-
-      <div className="p-4 border-t border-slate-100 space-y-2">
-        <button
-          onClick={handleConfirmAssignPopup}
-          disabled={!assignPopup.selectedId}
-          className="w-full bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-all text-sm"
-        >
-          {assignPopup.selectedId
-            ? `Xác nhận giao cho ${assignPopup.type === 'ca_nhan' ? danhSachTho.find(t => t.id === assignPopup.selectedId)?.ho_ten : danhSachNhom.find(n => n.id === assignPopup.selectedId)?.ten_nhom}`
-            : 'Chọn 1 người/nhóm ở trên'}
-        </button>
-        <button onClick={() => setAssignPopup(null)} className="w-full bg-white border border-slate-200 text-slate-500 font-bold py-2.5 rounded-xl text-sm">
-          Huỷ
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
 }
