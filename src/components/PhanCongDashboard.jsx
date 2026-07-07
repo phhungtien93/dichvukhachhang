@@ -526,9 +526,11 @@ export default function PhanCongDashboard({ profile }) {
         if (danhSachNhap.length === 0) return toast.error('File Excel trống!');
 
         // === TRẠM KIỂM SOÁT KÉP: CHẶN TRÙNG LẶP MÃ PE TRÊN TOÀN HỆ THỐNG ===
-        
-        // Lấy TOÀN BỘ mã PE đang hoạt động trên hệ thống (Bao gồm cả tồn đọng cũ VÀ ca đã giao cho NV)
-        const cacMaPEHienTai = danhSach.map(c => c.ma_pe.toUpperCase().trim());
+
+        // Lấy TOÀN BỘ mã PE đang hoạt động trên TOÀN HỆ THỐNG (không lọc theo Tổ - vì `danhSach` trong bộ nhớ
+        // giờ chỉ chứa ca của Tổ đang xem, nếu đối chiếu bằng danhSach sẽ bỏ sót ca trùng ở Tổ khác)
+        const { data: activeRows } = await supabase.from('danh_sach_doc_thu').select('ma_pe').eq('is_active', true);
+        const cacMaPEHienTai = (activeRows || []).map(c => c.ma_pe.toUpperCase().trim());
 
         // Đối chiếu danh sách Excel mới xem có ông nào dính vào hệ thống không
         const danhSachMaTrùng = danhSachNhap
@@ -789,6 +791,8 @@ export default function PhanCongDashboard({ profile }) {
   // 5. ĐẶC QUYỀN ĐỘI TRƯỞNG (ĐÃ TÁCH RA THÀNH HÀM ĐỘC LẬP CHUẨN CÚ PHÁP)
   const handleDoiTruongXuLyTonDong = async (ca, hanhDong) => {
     const tenHanhDong = hanhDong === 'da_thu' ? 'ĐÃ THU' : 'CẮT ĐIỆN';
+    // Ghi đúng tên người thao tác thay vì gắn cứng "ĐỘI TRƯỞNG" - vì giờ nhiều Tổ trưởng khác nhau đều dùng chung nút này
+    const tenNguoiThaoTac = profile?.ho_ten || 'ĐỘI TRƯỞNG';
     if (!window.confirm(`Xác nhận chốt ca này thành: ${tenHanhDong}?`)) return;
 
     const toastId = toast.loading(`Đội trưởng đang xử lý: ${tenHanhDong}...`);
@@ -800,7 +804,7 @@ export default function PhanCongDashboard({ profile }) {
         const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
         
         if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
-          await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: 'ĐỘI TRƯỞNG' }).eq('id', ca.id);
+          await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: tenNguoiThaoTac }).eq('id', ca.id);
           toast('⚠️ Khách đã có lệnh bên Điều Hành. Chuyển sang Lỗi KD!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
           fetchAllData();
           return;
@@ -837,10 +841,10 @@ export default function PhanCongDashboard({ profile }) {
       }
 
       await supabase.from('danh_sach_doc_thu')
-        .update({ 
-          trang_thai_hien_tai: hanhDong, 
-          nguoi_phu_trach: 'ĐỘI TRƯỞNG', 
-          ngay_nap_du_lieu: new Date().toISOString() 
+        .update({
+          trang_thai_hien_tai: hanhDong,
+          nguoi_phu_trach: tenNguoiThaoTac,
+          ngay_nap_du_lieu: new Date().toISOString()
         })
         .eq('id', ca.id);
 
