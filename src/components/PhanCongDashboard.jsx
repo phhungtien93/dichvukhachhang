@@ -314,10 +314,17 @@ export default function PhanCongDashboard({ profile }) {
     setHasSearched(true);
     try {
       // Tìm kiếm thông minh bằng ilike: khớp Mã PE, Số điện thoại hoặc Tên KH
-      const { data, error } = await supabase
+      let historyQuery = supabase
         .from('lich_su_phan_cong')
         .select('*')
-        .or(`ma_pe.ilike.%${searchQuery}%,so_dien_thoai.ilike.%${searchQuery}%,ten_kh.ilike.%${searchQuery}%`)
+        .or(`ma_pe.ilike.%${searchQuery}%,so_dien_thoai.ilike.%${searchQuery}%,ten_kh.ilike.%${searchQuery}%`);
+
+      // Đang xem 1 Tổ cụ thể -> chỉ tra cứu lịch sử của Tổ đó (kèm dữ liệu cũ chưa từng gắn Tổ nào)
+      if (batPhanCongTheoTo && viewingToId) {
+        historyQuery = historyQuery.or(`to_id.eq.${viewingToId},to_id.is.null`);
+      }
+
+      const { data, error } = await historyQuery
         .order('ngay_nap_du_lieu', { ascending: false })
         .limit(50); // Giới hạn 50 kết quả để chống lag nếu gõ từ khóa quá chung chung
 
