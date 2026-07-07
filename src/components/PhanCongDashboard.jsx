@@ -795,7 +795,7 @@ export default function PhanCongDashboard({ profile }) {
     const tenNguoiThaoTac = profile?.ho_ten || 'ĐỘI TRƯỞNG';
     if (!window.confirm(`Xác nhận chốt ca này thành: ${tenHanhDong}?`)) return;
 
-    const toastId = toast.loading(`Đội trưởng đang xử lý: ${tenHanhDong}...`);
+    const toastId = toast.loading(`Đang xử lý: ${tenHanhDong}...`);
     try {
       if (hanhDong === 'da_chuyen_cat_dien') {
         const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
@@ -819,7 +819,7 @@ export default function PhanCongDashboard({ profile }) {
           ly_do_ngung: 'no_cuoc',
           trang_thai: 'da_cat', 
           ngay_cat: new Date().toISOString(),
-          ghi_chu: `(Đội trưởng ép lệnh trực tiếp từ Tồn Đọng)`
+          ghi_chu: `(${tenNguoiThaoTac} đã kiểm tra, thực hiện chuyển từ Phân Công)`
         };
 
         let newCustomerId = null;
@@ -834,8 +834,8 @@ export default function PhanCongDashboard({ profile }) {
         if (newCustomerId) {
           await supabase.from('suspension_logs').insert([{
             customer_id: newCustomerId,
-            hanh_dong: 'Đội trưởng ép lệnh',
-            noi_dung: `Đội trưởng đã xác minh khách Hẹn Lại KHÔNG ĐÓNG. Yêu cầu CẮT ĐIỆN!`
+            hanh_dong: `${tenNguoiThaoTac} chuyển từ Phân Công`,
+            noi_dung: `${tenNguoiThaoTac} đã kiểm tra, thực hiện chuyển từ Phân Công sang CẮT ĐIỆN (khách hẹn lại nhưng không đóng).`
           }]);
         }
       }
