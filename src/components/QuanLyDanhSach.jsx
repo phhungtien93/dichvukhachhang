@@ -643,9 +643,9 @@ export default function QuanLyDanhSach({ session, profile }) {
               </div>
               <button
                 onClick={handleToggleTinhNangTo}
-                className={`shrink-0 w-12 h-7 rounded-full transition-colors relative ${batPhanCongTheoTo ? 'bg-purple-600' : 'bg-slate-300'}`}
+                className={`shrink-0 w-12 h-7 rounded-full transition-colors relative p-0 border-0 ${batPhanCongTheoTo ? 'bg-purple-600' : 'bg-slate-300'}`}
               >
-                <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${batPhanCongTheoTo ? 'translate-x-6' : 'translate-x-1'}`}></span>
+                <span className={`absolute left-0 top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${batPhanCongTheoTo ? 'translate-x-6' : 'translate-x-1'}`}></span>
               </button>
             </div>
 
