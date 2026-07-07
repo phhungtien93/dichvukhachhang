@@ -90,6 +90,7 @@ export default function QuanLyDanhSach({ session, profile }) {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('user');
   const [selectedTabsAccess, setSelectedTabsAccess] = useState(['cho_cat', 'da_cat', 'dinh_ky', 'hoan_tat']);
+  const [batPhanCongTheoTo, setBatPhanCongTheoTo] = useState(false); // Cờ toàn hệ thống: bật tính năng Phân Công Theo Tổ
 
   // ================= DỮ LIỆU KHÁCH HÀNG =================
   const [customers, setCustomers] = useState([]);
@@ -177,6 +178,26 @@ export default function QuanLyDanhSach({ session, profile }) {
   };
 
   useEffect(() => { if (viewMode === 'admin' && profile?.role === 'admin') fetchUsersList(); }, [viewMode]);
+
+  // ================= CẤU HÌNH TOÀN HỆ THỐNG (BẬT/TẮT PHÂN CÔNG THEO TỔ) =================
+  useEffect(() => {
+    if (viewMode === 'admin' && profile?.role === 'admin') {
+      supabase.from('cau_hinh_he_thong').select('bat_phan_cong_theo_to').eq('id', 1).single()
+        .then(({ data }) => setBatPhanCongTheoTo(data?.bat_phan_cong_theo_to || false));
+    }
+  }, [viewMode]);
+
+  const handleToggleTinhNangTo = async () => {
+    const giaTriMoi = !batPhanCongTheoTo;
+    setBatPhanCongTheoTo(giaTriMoi); // cập nhật ngay giao diện, phản hồi tức thì
+    const { error } = await supabase.from('cau_hinh_he_thong').update({ bat_phan_cong_theo_to: giaTriMoi }).eq('id', 1);
+    if (error) {
+      setBatPhanCongTheoTo(!giaTriMoi); // rollback nếu lỗi
+      toast.error('Lỗi khi lưu cấu hình!');
+    } else {
+      toast.success(giaTriMoi ? 'Đã BẬT Phân Công Theo Tổ!' : 'Đã TẮT Phân Công Theo Tổ!');
+    }
+  };
 
   const handleToggleTabPermission = (tabId) => {
     if (selectedTabsAccess.includes(tabId)) setSelectedTabsAccess(selectedTabsAccess.filter(id => id !== tabId));
@@ -615,6 +636,19 @@ export default function QuanLyDanhSach({ session, profile }) {
         {/* ================= KHU VỰC QUẢN TRỊ ADMIN ================= */}
         {viewMode === 'admin' && profile?.role === 'admin' && (
           <div className="fade-in space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><i className="fa-solid fa-people-roof text-purple-500"></i> Phân Công Theo Tổ</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Chia nhân sự thành nhiều Tổ độc lập, mỗi Tổ tự quản lý phân công riêng.</p>
+              </div>
+              <button
+                onClick={handleToggleTinhNangTo}
+                className={`shrink-0 w-12 h-7 rounded-full transition-colors relative ${batPhanCongTheoTo ? 'bg-purple-600' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${batPhanCongTheoTo ? 'translate-x-6' : 'translate-x-1'}`}></span>
+              </button>
+            </div>
+
             <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1.5 gap-1">
               <button onClick={() => setAdminView('list')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminView === 'list' ? 'bg-amber-500 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><i className="fa-solid fa-list-ul mr-1.5"></i> Danh sách NV</button>
               <button onClick={() => { setAdminView('create'); resetAdminForm(); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminView === 'create' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><i className="fa-solid fa-user-plus mr-1.5"></i> Cấp tài khoản</button>
