@@ -55,16 +55,17 @@ const fetchProfile = async (userId) => {
       const access = profile.tabs_access || [];
       let isAllowed = false;
       
-      if (activeTab === 'phancong' && access.includes('app_phan_cong')) isAllowed = true;
+      // Tab Phân Công không còn cấp qua checkbox phân quyền nữa -> chỉ Tổ trưởng (la_to_truong) mới có quyền
+      if (activeTab === 'phancong' && profile.la_to_truong) isAllowed = true;
       if (activeTab === 'nhanviec' && access.includes('app_nhan_viec')) isAllowed = true;
       if (activeTab === 'danhsach' && access.includes('app_dieu_hanh')) isAllowed = true;
       if (activeTab === 'thongke' && access.includes('app_thong_ke')) isAllowed = true;
 
       // Nếu đang đứng ở Tab không có quyền -> Tự động chuyển qua Tab hợp lệ đầu tiên
-      if (!isAllowed && access.length > 0) {
+      if (!isAllowed && (access.length > 0 || profile.la_to_truong)) {
         if (access.includes('app_nhan_viec')) setActiveTab('nhanviec');
         else if (access.includes('app_dieu_hanh')) setActiveTab('danhsach');
-        else if (access.includes('app_phan_cong')) setActiveTab('phancong');
+        else if (profile.la_to_truong) setActiveTab('phancong');
         else if (access.includes('app_thong_ke')) setActiveTab('thongke');
       }
     }
@@ -73,8 +74,9 @@ const fetchProfile = async (userId) => {
   // KIỂM TRA QUYỀN ĐỂ ẨN/HIỆN NÚT BẤM DƯỚI ĐÁY MÀN HÌNH
   const isAdmin = profile?.role === 'admin';
   const access = profile?.tabs_access || [];
-  
-  const canPhanCong = isAdmin || access.includes('app_phan_cong');
+
+  // Tab Phân Công: chỉ Admin hoặc Tổ trưởng (la_to_truong) mới thấy - không còn cấp qua phân quyền tabs_access
+  const canPhanCong = isAdmin || profile?.la_to_truong === true;
   const canNhanViec = isAdmin || access.includes('app_nhan_viec');
   const canDieuHanh = isAdmin || access.includes('app_dieu_hanh');
   const canThongKe = isAdmin || access.includes('app_thong_ke');

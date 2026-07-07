@@ -705,11 +705,7 @@ export default function QuanLyDanhSach({ session, profile }) {
                 {newUserRole === 'user' && (
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 fade-in">
                     <label className="block text-xs font-bold text-slate-600 uppercase mb-2 border-b border-slate-200 pb-2">Hệ Thống Phân Quyền Phân Hệ</label>
-
-                    <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
-                      <input type="checkbox" checked={selectedTabsAccess.includes('app_phan_cong')} onChange={() => handleToggleTabPermission('app_phan_cong')} className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-users-gear text-blue-500 w-5 text-center"></i> Điều Phối (Đội trưởng)</span>
-                    </label>
+                    <p className="text-[10px] text-slate-400 -mt-1 mb-1 italic">Tab Phân Công không cấp ở đây nữa — chỉ Tổ trưởng (gán trong Tab Phân Công) mới có quyền vào.</p>
 
                     <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
                       <input type="checkbox" checked={selectedTabsAccess.includes('app_nhan_viec')} onChange={() => handleToggleTabPermission('app_nhan_viec')} className="w-4 h-4 text-amber-600 rounded" />

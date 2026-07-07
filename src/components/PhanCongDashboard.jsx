@@ -339,7 +339,8 @@ export default function PhanCongDashboard({ profile }) {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
+      // Tổ trưởng (la_to_truong) là người ĐI GIAO việc, không phải người NHẬN việc -> loại khỏi danh sách thợ/thành viên nhóm
+      let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').eq('la_to_truong', false).order('ho_ten');
       let nhomQuery = supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
       let dsQuery = supabase
         .from('danh_sach_doc_thu')
