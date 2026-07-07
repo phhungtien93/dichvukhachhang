@@ -1487,7 +1487,7 @@ export default function PhanCongDashboard() {
 
       {/* MỚI: THANH "GIAO VIỆC ĐÃ CHỌN" - đặt NGOÀI vùng cuộn, ngay trên Giỏ hàng -> tuyệt đối không bị cuộn mất */}
       {mainTab === 'phan_cong' && selectedUnassignedIds.length > 0 && (
-        <div className="bg-blue-600 text-white p-2.5 flex items-center justify-between shrink-0 shadow-[0_-4px_10px_-2px_rgba(0,0,0,0.15)] z-40 relative fade-in">
+ 		<div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md bg-blue-600 text-white p-2.5 flex items-center justify-between shadow-[0_-4px_10px_-2px_rgba(0,0,0,0.15)] z-[59] fade-in">
           <span className="text-[11px] font-black pl-1">
             <i className="fa-solid fa-square-check mr-1.5"></i>{selectedUnassignedIds.length} ca đã chọn
           </span>
