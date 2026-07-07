@@ -755,7 +755,7 @@ export default function PhanCongDashboard() {
       </div>
 
       {/* KHO VIỆC 2 TẦNG (GOM THEO SỔ GCS CHUẨN) */}
-      <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+      <div className={`flex-1 p-3 space-y-3 overflow-y-auto ${selectedUnassignedIds.length > 0 ? 'pb-16' : ''}`}>
         
         {/* === THANH ĐIỀU HƯỚNG MÀN HÌNH CHÍNH === */}
         <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex shrink-0">
