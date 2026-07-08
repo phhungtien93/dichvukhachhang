@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
-export default function PhanCongDashboard({ profile }) {
+export default function PhanCongDashboard({ profile, isActive = true }) {
   const isAdmin = profile?.role === 'admin';
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
@@ -382,8 +382,9 @@ export default function PhanCongDashboard({ profile }) {
   };
   
   // 1. TẢI DỮ LIỆU TỪ SUPABASE
-  const fetchAllData = async () => {
-    setLoading(true);
+  // ngam = true: tải lại âm thầm (không bật skeleton loading) - dùng khi tự làm mới lúc quay lại Tab, giữ nguyên giao diện đang có
+  const fetchAllData = async ({ ngam = false } = {}) => {
+    if (!ngam) setLoading(true);
     try {
       let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
       let nhomQuery = supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
@@ -432,13 +433,13 @@ export default function PhanCongDashboard({ profile }) {
     } catch (error) {
       toast.error('Lỗi kết nối cơ sở dữ liệu!');
     } finally {
-      setLoading(false);
+      if (!ngam) setLoading(false);
     }
   };
 
   // HÀM: Tải danh sách Tổ + TOÀN BỘ nhân viên (không lọc) - dùng cho màn Tổng quan Tổ của Admin
-  const fetchOverviewData = async () => {
-    setLoading(true);
+  const fetchOverviewData = async ({ ngam = false } = {}) => {
+    if (!ngam) setLoading(true);
     try {
       const [{ data: toData }, { data: allUsers }] = await Promise.all([
         supabase.from('danh_sach_to').select('*').order('ten_to'),
@@ -449,7 +450,7 @@ export default function PhanCongDashboard({ profile }) {
     } catch (error) {
       toast.error('Lỗi kết nối cơ sở dữ liệu!');
     } finally {
-      setLoading(false);
+      if (!ngam) setLoading(false);
     }
   };
 
@@ -475,6 +476,17 @@ export default function PhanCongDashboard({ profile }) {
     if (!batPhanCongTheoTo) return;
     supabase.from('danh_sach_to').select('*').order('ten_to').then(({ data }) => setDanhSachTo(data || []));
   }, [batPhanCongTheoTo]);
+
+  // Tab này giờ được giữ "sống" ngầm thay vì gỡ/tạo lại mỗi lần đổi Tab (xem App.jsx) -> tự âm thầm làm mới
+  // dữ liệu mỗi khi quay lại Tab (không phải lần mount đầu tiên), giữ nguyên toàn bộ giao diện đang có
+  const tungActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !tungActiveRef.current && !dangTaiCauHinh) {
+      if (dangOTongQuan) fetchOverviewData({ ngam: true });
+      else fetchAllData({ ngam: true });
+    }
+    tungActiveRef.current = isActive;
+  }, [isActive]);
 
   // Dọn sạch các state tạm (giỏ đang mở, ca đang tick, popup...) mỗi khi đổi Tổ đang xem
   // -> tránh còn sót tham chiếu/dữ liệu của Tổ trước đó khi Đội trưởng chuyển qua lại giữa các Tổ
