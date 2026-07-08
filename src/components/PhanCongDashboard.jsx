@@ -177,17 +177,27 @@ export default function PhanCongDashboard({ profile }) {
       const thanhVienTruocDay = editingTo ? toanBoNhanVien.filter(nv => nv.to_id === editingTo.id).map(nv => nv.id) : [];
       const idBiGo = thanhVienTruocDay.filter(id => !newToMembers.includes(id));
 
+      // Ai MỚI được đặt làm Tổ trưởng lúc này (trước đó chưa phải) -> họ thôi nhận việc cá nhân từ giờ,
+      // nên cần thu hồi luôn số ca đang treo trên tay họ, giống hệt trường hợp bị gỡ khỏi Tổ
+      const truocDoLaToTruong = newToTruongId ? toanBoNhanVien.find(nv => nv.id === newToTruongId)?.la_to_truong : false;
+      const idsMoiLenToTruong = (newToTruongId && !truocDoLaToTruong) ? [newToTruongId] : [];
+
       // Gán to_id + la_to_truong cho các thành viên ĐƯỢC CHỌN
       for (const nvId of newToMembers) {
         await supabase.from('user_profiles').update({ to_id: toId, la_to_truong: nvId === newToTruongId }).eq('id', nvId);
       }
 
-      // Thành viên bị GỠ khỏi Tổ: trả to_id về NULL + thu hồi ca CHƯA XỬ LÝ của họ về kho việc chung của Tổ
+      // Thành viên bị GỠ khỏi Tổ: trả to_id về NULL
       if (idBiGo.length > 0) {
         await supabase.from('user_profiles').update({ to_id: null, la_to_truong: false }).in('id', idBiGo);
+      }
+
+      // Thu hồi ca CHƯA XỬ LÝ đang giao cá nhân cho: (a) người bị gỡ khỏi Tổ, (b) người mới lên làm Tổ trưởng
+      const idsCanThuHoiCaCaNhan = [...idBiGo, ...idsMoiLenToTruong];
+      if (idsCanThuHoiCaCaNhan.length > 0) {
         await supabase.from('danh_sach_doc_thu')
           .update({ nguoi_phu_trach: null, tho_id: null })
-          .in('tho_id', idBiGo)
+          .in('tho_id', idsCanThuHoiCaCaNhan)
           .not('trang_thai_hien_tai', 'in', `(${CAC_TRANG_THAI_DA_XU_LY.join(',')})`);
       }
 
@@ -275,6 +285,7 @@ export default function PhanCongDashboard({ profile }) {
     try {
       const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
       const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? selectedMicroTasks.filter(id => !danhSach.find(c => c.id === id)?.to_id) : [];
 
       const payloadBase = {
         ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
@@ -290,14 +301,19 @@ export default function PhanCongDashboard({ profile }) {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
 
       // MỚI: Cập nhật trực tiếp trong bộ nhớ thay vì tải lại từ server
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
-        if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, ...payloadBase };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
-      
+
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
@@ -346,8 +362,7 @@ export default function PhanCongDashboard({ profile }) {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Tổ trưởng (la_to_truong) là người ĐI GIAO việc, không phải người NHẬN việc -> loại khỏi danh sách thợ/thành viên nhóm
-      let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').eq('la_to_truong', false).order('ho_ten');
+      let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
       let nhomQuery = supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
       let dsQuery = supabase
         .from('danh_sach_doc_thu')
@@ -355,12 +370,18 @@ export default function PhanCongDashboard({ profile }) {
         .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
         .eq('is_active', true);
 
-      // KHI ĐANG XEM 1 TỔ CỤ THỂ: lọc nhân viên + nhóm đúng theo Tổ đó.
-      // Riêng "Kho Việc" (ca đốc thu) vẫn cho hiện thêm các ca CHƯA từng gắn Tổ nào (to_id NULL - dữ liệu cũ/mới nạp) để Tổ trưởng có thể nhận và tự động gắn Tổ khi giao việc.
-      if (batPhanCongTheoTo && viewingToId) {
-        userQuery = userQuery.eq('to_id', viewingToId);
-        nhomQuery = nhomQuery.eq('to_id', viewingToId);
-        dsQuery = dsQuery.or(`to_id.eq.${viewingToId},to_id.is.null`);
+      // CHỈ áp các luật liên quan Tổ khi tính năng đang BẬT - tắt đi là y hệt app gốc, không sót hành vi nào
+      if (batPhanCongTheoTo) {
+        // Tổ trưởng (la_to_truong) là người ĐI GIAO việc, không phải người NHẬN việc -> loại khỏi danh sách thợ/thành viên nhóm
+        userQuery = userQuery.eq('la_to_truong', false);
+
+        // KHI ĐANG XEM 1 TỔ CỤ THỂ: lọc nhân viên + nhóm đúng theo Tổ đó.
+        // Riêng "Kho Việc" (ca đốc thu) vẫn cho hiện thêm các ca CHƯA từng gắn Tổ nào (to_id NULL - dữ liệu cũ/mới nạp) để Tổ trưởng có thể nhận và tự động gắn Tổ khi giao việc.
+        if (viewingToId) {
+          userQuery = userQuery.eq('to_id', viewingToId);
+          nhomQuery = nhomQuery.eq('to_id', viewingToId);
+          dsQuery = dsQuery.or(`to_id.eq.${viewingToId},to_id.is.null`);
+        }
       }
 
       // Gộp cả 5 lượt gọi Supabase để chạy SONG SONG cùng lúc bằng Promise.all
@@ -424,6 +445,17 @@ export default function PhanCongDashboard({ profile }) {
     if (dangOTongQuan) fetchOverviewData();
     else fetchAllData();
   }, [dangTaiCauHinh, dangOTongQuan, viewingToId]);
+
+  // Dọn sạch các state tạm (giỏ đang mở, ca đang tick, popup...) mỗi khi đổi Tổ đang xem
+  // -> tránh còn sót tham chiếu/dữ liệu của Tổ trước đó khi Đội trưởng chuyển qua lại giữa các Tổ
+  useEffect(() => {
+    setActiveWorkerCart(null);
+    setActiveGroupCart(null);
+    setSelectedMicroTasks([]);
+    setSelectedUnassignedIds([]);
+    setAssignPopup(null);
+    setExpandedGroups({});
+  }, [viewingToId]);
 
   // HÀM HỖ TRỢ: RỬA SỐ TRỤ
   const extractAndFixPole = (address, tuyenGoc) => {
@@ -775,6 +807,7 @@ export default function PhanCongDashboard({ profile }) {
     try {
       const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
       const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? selectedMicroTasks.filter(id => !danhSach.find(c => c.id === id)?.to_id) : [];
 
       if (caThuongIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
@@ -782,11 +815,16 @@ export default function PhanCongDashboard({ profile }) {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
-      
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
+
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
