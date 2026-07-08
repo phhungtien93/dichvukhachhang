@@ -238,7 +238,7 @@ if (!session) {
           )}
           
           {canDieuHanh && (
-            <button onClick={() => setActiveTab('danhsach')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+            <button id="btn-tab-dieu-hanh" onClick={() => setActiveTab('danhsach')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
               <i className={`text-xl mb-1 ${activeTab === 'danhsach' ? 'fa-solid fa-clipboard-list' : 'fa-solid fa-list'}`}></i>
               <span className="text-[10px] font-bold uppercase tracking-wide">Điều Hành</span>
             </button>
