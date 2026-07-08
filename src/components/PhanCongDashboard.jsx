@@ -63,13 +63,36 @@ export default function PhanCongDashboard({ profile }) {
   const [newGroupMembers, setNewGroupMembers] = useState([]);
 
   // ================= HỆ THỐNG "TỔ" (PHÂN QUYỀN THEO TỔ) =================
+  // Lưu theo từng tài khoản (kèm profile.id vào khoá) để đổi Tab qua lại không bị mất vị trí đang xem,
+  // đồng thời tránh 2 tài khoản Admin khác nhau dùng chung máy bị lẫn vị trí xem của nhau.
+  const KHOA_VIEWING_TO_ID = `phan_cong_viewing_to_id_${profile?.id}`;
+  const KHOA_DANG_XEM_CHI_TIET = `phan_cong_dang_xem_chi_tiet_${profile?.id}`;
+
   const [dangTaiCauHinh, setDangTaiCauHinh] = useState(true); // đang tải cờ bật/tắt tính năng, tránh chớp giao diện
   const [batPhanCongTheoTo, setBatPhanCongTheoTo] = useState(false); // cờ toàn hệ thống
   const [danhSachTo, setDanhSachTo] = useState([]); // toàn bộ các Tổ hiện có
   const [toanBoNhanVien, setToanBoNhanVien] = useState([]); // TẤT CẢ nhân viên (không lọc theo Tổ) - dùng cho màn Tổng quan
-  const [viewingToId, setViewingToId] = useState(profile?.to_id || null); // Tổ đang xem chi tiết. Tổ trưởng bị khoá cứng theo profile.to_id
-  const [dangXemChiTiet, setDangXemChiTiet] = useState(!isAdmin); // Tổ trưởng luôn vào thẳng chi tiết; Admin bắt đầu ở màn tổng quan
+  const [viewingToId, setViewingToId] = useState(() => {
+    if (profile?.to_id) return profile.to_id; // Tổ trưởng luôn khoá cứng theo Tổ của mình
+    return localStorage.getItem(KHOA_VIEWING_TO_ID) || null; // Admin: khôi phục lại Tổ đang xem dở lần trước
+  });
+  const [dangXemChiTiet, setDangXemChiTiet] = useState(() => {
+    if (!isAdmin) return true; // Tổ trưởng luôn vào thẳng chi tiết
+    return localStorage.getItem(KHOA_DANG_XEM_CHI_TIET) === '1'; // Admin: khôi phục lại đúng màn đang đứng lần trước
+  });
   const dangOTongQuan = batPhanCongTheoTo && isAdmin && !dangXemChiTiet;
+
+  // Ghi nhớ lại mỗi khi Admin đổi Tổ đang xem / đổi qua lại giữa Tổng quan và Chi tiết
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (viewingToId) localStorage.setItem(KHOA_VIEWING_TO_ID, viewingToId);
+    else localStorage.removeItem(KHOA_VIEWING_TO_ID);
+  }, [isAdmin, viewingToId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    localStorage.setItem(KHOA_DANG_XEM_CHI_TIET, dangXemChiTiet ? '1' : '0');
+  }, [isAdmin, dangXemChiTiet]);
 
   const [isCreatingTo, setIsCreatingTo] = useState(false);
   const [editingTo, setEditingTo] = useState(null);
@@ -445,6 +468,13 @@ export default function PhanCongDashboard({ profile }) {
     if (dangOTongQuan) fetchOverviewData();
     else fetchAllData();
   }, [dangTaiCauHinh, dangOTongQuan, viewingToId]);
+
+  // Luôn tải sẵn danh sách Tổ khi tính năng đang bật (kể cả khi Admin nhảy thẳng vào Chi Tiết nhờ nhớ vị trí cũ,
+  // không đi qua màn Tổng quan) -> để nút "Quay lại tổng quan" luôn hiện đúng tên Tổ, không bị rỗng
+  useEffect(() => {
+    if (!batPhanCongTheoTo) return;
+    supabase.from('danh_sach_to').select('*').order('ten_to').then(({ data }) => setDanhSachTo(data || []));
+  }, [batPhanCongTheoTo]);
 
   // Dọn sạch các state tạm (giỏ đang mở, ca đang tick, popup...) mỗi khi đổi Tổ đang xem
   // -> tránh còn sót tham chiếu/dữ liệu của Tổ trước đó khi Đội trưởng chuyển qua lại giữa các Tổ
