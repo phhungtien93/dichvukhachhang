@@ -1026,7 +1026,14 @@ export default function QuanLyDanhSach({ session, profile }) {
                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 border-b pb-1">Mảng Nghiệp Vụ Giấy Tờ / Tài Chính</h4>
                  {customerInfo?.trang_thai === 'cho_xac_minh' && (
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => openActionModal('vp_xac_minh_ok', 'Xác minh OK - Gạch nợ')} className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all"><i className="fa-solid fa-circle-check text-lg"></i> <span className="text-[10px] uppercase">Xác Minh OK</span></button>
+                      <button
+                        onClick={() => openActionModal('vp_xac_minh_ok', 'Xác minh OK - Gạch nợ')}
+                        disabled={customerInfo?.chua_thay_dinh_ky}
+                        className={`w-full font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all border ${customerInfo?.chua_thay_dinh_ky ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                      >
+                        <i className={`fa-solid ${customerInfo?.chua_thay_dinh_ky ? 'fa-lock' : 'fa-circle-check'} text-lg`}></i>
+                        <span className="text-[10px] uppercase">{customerInfo?.chua_thay_dinh_ky ? 'Chờ thay ĐK' : 'Xác Minh OK'}</span>
+                      </button>
                       <button onClick={() => openActionModal('vp_yeu_cau_cat', 'Từ chối hoãn - Chỉ thị cắt')} className="w-full bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all"><i className="fa-solid fa-triangle-exclamation text-lg"></i> <span className="text-[10px] uppercase">Chuyển lệnh cắt</span></button>
                     </div>
                  )}
@@ -1052,12 +1059,18 @@ export default function QuanLyDanhSach({ session, profile }) {
                         <i className="fa-solid fa-money-bill-transfer text-base"></i> Khách chuyển khoản (Có Bill)
                       </button>
 
-                      {/* Nút 3: Đã thanh toán (Nợ = 0) (Màu xanh ngọc pastel) */}
-                      <button 
-                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')} 
-                        className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+                      {/* Nút 3: Đã thanh toán (Nợ = 0) (Màu xanh ngọc pastel) - khoá nếu còn nợ thay điện kế định kỳ,
+                          để tránh khách thoát khỏi luồng cắt điện mà chưa từng bị bắt buộc thay công tơ */}
+                      <button
+                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')}
+                        disabled={customerInfo?.chua_thay_dinh_ky}
+                        className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all border ${customerInfo?.chua_thay_dinh_ky ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
                       >
-                        <i className="fa-solid fa-circle-check text-base"></i> Xác nhận Đã Đóng Tiền Cước
+                        {customerInfo?.chua_thay_dinh_ky ? (
+                          <><i className="fa-solid fa-lock"></i> Phải Thay Điện Kế trước khi hủy lệnh cắt</>
+                        ) : (
+                          <><i className="fa-solid fa-circle-check text-base"></i> Xác nhận Đã Đóng Tiền Cước</>
+                        )}
                       </button>
 
                       {/* Nút 4: Báo trở ngại (Màu tím pastel - Đã chỉnh lại py-3.5 cho đều nhau) */}
