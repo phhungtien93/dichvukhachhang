@@ -353,10 +353,13 @@ export default function PhanCongDashboard({ profile, isActive = true }) {
     setHasSearched(true);
     try {
       // Tìm kiếm thông minh bằng ilike: khớp Mã PE, Số điện thoại hoặc Tên KH
+      // Bỏ dấu phẩy/ngoặc khỏi từ khoá trước khi ghép vào câu lọc PostgREST, tránh người dùng
+      // gõ ký tự đặc biệt để chèn thêm điều kiện lọc ngoài ý muốn (PostgREST filter injection).
+      const tuKhoaAnToan = searchQuery.replace(/[,()]/g, ' ').trim();
       let historyQuery = supabase
         .from('lich_su_phan_cong')
         .select('*')
-        .or(`ma_pe.ilike.%${searchQuery}%,so_dien_thoai.ilike.%${searchQuery}%,ten_kh.ilike.%${searchQuery}%`);
+        .or(`ma_pe.ilike.%${tuKhoaAnToan}%,so_dien_thoai.ilike.%${tuKhoaAnToan}%,ten_kh.ilike.%${tuKhoaAnToan}%`);
 
       // Đang xem 1 Tổ cụ thể -> chỉ tra cứu lịch sử của Tổ đó (kèm dữ liệu cũ chưa từng gắn Tổ nào)
       if (batPhanCongTheoTo && viewingToId) {
