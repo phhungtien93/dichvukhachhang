@@ -217,13 +217,17 @@ export default function QuanLyDanhSach({ session, profile }) {
     const { data: authData, error: authError } = await supabase.auth.signUp({ email: newUserEmail, password: newUserPassword });
     if (authError) { toast.error('Lỗi tạo tài khoản: ' + authError.message); setLoading(false); return; } 
 
+    // QUAN TRỌNG: signUp() tự động chuyển session hiện tại của trình duyệt sang tài khoản VỪA TẠO.
+    // Phải khôi phục lại session Admin TRƯỚC khi insert user_profiles, nếu không insert sẽ chạy dưới
+    // quyền tài khoản mới (chưa phải admin) và bị chặn bởi RLS "Chỉ Admin được tạo tài khoản".
+    if (currentAdminSession) await supabase.auth.setSession(currentAdminSession);
+
     if (authData?.user) {
       const accessRights = newUserRole === 'admin' ? ['cho_xac_minh', 'cho_cat', 'da_cat', 'dinh_ky', 'hoan_tat'] : selectedTabsAccess;
       const { error: profileError } = await supabase.from('user_profiles').insert([{ id: authData.user.id, email: newUserEmail, ho_ten: newUserName.trim(), role: newUserRole, tabs_access: accessRights }]);
       if (profileError) toast.error('Lỗi phân quyền: ' + profileError.message);
       else toast.success(`Khởi tạo thành công: ${newUserName.trim()}`);
     }
-    if (currentAdminSession) await supabase.auth.setSession(currentAdminSession);
     setAdminView('list'); fetchUsersList(); setLoading(false);
   };
 
