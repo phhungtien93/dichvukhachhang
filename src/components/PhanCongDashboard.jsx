@@ -3,7 +3,8 @@ import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
-export default function PhanCongDashboard() {
+export default function PhanCongDashboard({ profile, isActive = true }) {
+  const isAdmin = profile?.role === 'admin';
   const [loading, setLoading] = useState(false);
   const [danhSach, setDanhSach] = useState([]);
   
@@ -61,6 +62,44 @@ export default function PhanCongDashboard() {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState([]);
 
+  // ================= HỆ THỐNG "TỔ" (PHÂN QUYỀN THEO TỔ) =================
+  // Lưu theo từng tài khoản (kèm profile.id vào khoá) để đổi Tab qua lại không bị mất vị trí đang xem,
+  // đồng thời tránh 2 tài khoản Admin khác nhau dùng chung máy bị lẫn vị trí xem của nhau.
+  const KHOA_VIEWING_TO_ID = `phan_cong_viewing_to_id_${profile?.id}`;
+  const KHOA_DANG_XEM_CHI_TIET = `phan_cong_dang_xem_chi_tiet_${profile?.id}`;
+
+  const [dangTaiCauHinh, setDangTaiCauHinh] = useState(true); // đang tải cờ bật/tắt tính năng, tránh chớp giao diện
+  const [batPhanCongTheoTo, setBatPhanCongTheoTo] = useState(false); // cờ toàn hệ thống
+  const [danhSachTo, setDanhSachTo] = useState([]); // toàn bộ các Tổ hiện có
+  const [toanBoNhanVien, setToanBoNhanVien] = useState([]); // TẤT CẢ nhân viên (không lọc theo Tổ) - dùng cho màn Tổng quan
+  const [viewingToId, setViewingToId] = useState(() => {
+    if (profile?.to_id) return profile.to_id; // Tổ trưởng luôn khoá cứng theo Tổ của mình
+    return localStorage.getItem(KHOA_VIEWING_TO_ID) || null; // Admin: khôi phục lại Tổ đang xem dở lần trước
+  });
+  const [dangXemChiTiet, setDangXemChiTiet] = useState(() => {
+    if (!isAdmin) return true; // Tổ trưởng luôn vào thẳng chi tiết
+    return localStorage.getItem(KHOA_DANG_XEM_CHI_TIET) === '1'; // Admin: khôi phục lại đúng màn đang đứng lần trước
+  });
+  const dangOTongQuan = batPhanCongTheoTo && isAdmin && !dangXemChiTiet;
+
+  // Ghi nhớ lại mỗi khi Admin đổi Tổ đang xem / đổi qua lại giữa Tổng quan và Chi tiết
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (viewingToId) localStorage.setItem(KHOA_VIEWING_TO_ID, viewingToId);
+    else localStorage.removeItem(KHOA_VIEWING_TO_ID);
+  }, [isAdmin, viewingToId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    localStorage.setItem(KHOA_DANG_XEM_CHI_TIET, dangXemChiTiet ? '1' : '0');
+  }, [isAdmin, dangXemChiTiet]);
+
+  const [isCreatingTo, setIsCreatingTo] = useState(false);
+  const [editingTo, setEditingTo] = useState(null);
+  const [newToName, setNewToName] = useState('');
+  const [newToMembers, setNewToMembers] = useState([]);
+  const [newToTruongId, setNewToTruongId] = useState(null);
+
   // HÀM: Lưu Nhóm (Dùng chung cho cả Tạo Mới và Hiệu Chỉnh)
   const handleSaveGroup = async (e) => {
     e.preventDefault();
@@ -91,7 +130,8 @@ export default function PhanCongDashboard() {
         // LUỒNG 2: TẠO NHÓM MỚI (Như cũ)
         const { error: errNew } = await supabase.from('danh_sach_nhom').insert([{
           ten_nhom: newGroupName.trim(),
-          thanh_vien_ids: chuoiThanhVien 
+          thanh_vien_ids: chuoiThanhVien,
+          to_id: (batPhanCongTheoTo && viewingToId) ? viewingToId : null
         }]);
         if (errNew) throw errNew;
         toast.success('Tạo nhóm thành công!', { id: toastId });
@@ -137,6 +177,84 @@ export default function PhanCongDashboard() {
     }
   };
 
+  // ================= QUẢN LÝ TỔ (TẠO / SỬA / XOÁ / GÁN THÀNH VIÊN) =================
+  const CAC_TRANG_THAI_DA_XU_LY = ['da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'];
+
+  const handleSaveTo = async (e) => {
+    e.preventDefault();
+    if (!newToName.trim()) return toast.error('Vui lòng nhập tên Tổ!');
+
+    const toastId = toast.loading(editingTo ? 'Đang cập nhật Tổ...' : 'Đang tạo Tổ...');
+    try {
+      let toId = editingTo?.id;
+      if (editingTo) {
+        const { error } = await supabase.from('danh_sach_to').update({ ten_to: newToName.trim() }).eq('id', editingTo.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('danh_sach_to').insert([{ ten_to: newToName.trim() }]).select();
+        if (error) throw error;
+        toId = data[0].id;
+      }
+
+      // Thành viên TRƯỚC ĐÂY của Tổ này (nếu đang sửa) so với danh sách MỚI chọn -> xác định ai bị GỠ ra
+      const thanhVienTruocDay = editingTo ? toanBoNhanVien.filter(nv => nv.to_id === editingTo.id).map(nv => nv.id) : [];
+      const idBiGo = thanhVienTruocDay.filter(id => !newToMembers.includes(id));
+
+      // Ai MỚI được đặt làm Tổ trưởng lúc này (trước đó chưa phải) -> họ thôi nhận việc cá nhân từ giờ,
+      // nên cần thu hồi luôn số ca đang treo trên tay họ, giống hệt trường hợp bị gỡ khỏi Tổ
+      const truocDoLaToTruong = newToTruongId ? toanBoNhanVien.find(nv => nv.id === newToTruongId)?.la_to_truong : false;
+      const idsMoiLenToTruong = (newToTruongId && !truocDoLaToTruong) ? [newToTruongId] : [];
+
+      // Gán to_id + la_to_truong cho các thành viên ĐƯỢC CHỌN
+      for (const nvId of newToMembers) {
+        await supabase.from('user_profiles').update({ to_id: toId, la_to_truong: nvId === newToTruongId }).eq('id', nvId);
+      }
+
+      // Thành viên bị GỠ khỏi Tổ: trả to_id về NULL
+      if (idBiGo.length > 0) {
+        await supabase.from('user_profiles').update({ to_id: null, la_to_truong: false }).in('id', idBiGo);
+      }
+
+      // Thu hồi ca CHƯA XỬ LÝ đang giao cá nhân cho: (a) người bị gỡ khỏi Tổ, (b) người mới lên làm Tổ trưởng
+      const idsCanThuHoiCaCaNhan = [...idBiGo, ...idsMoiLenToTruong];
+      if (idsCanThuHoiCaCaNhan.length > 0) {
+        await supabase.from('danh_sach_doc_thu')
+          .update({ nguoi_phu_trach: null, tho_id: null })
+          .in('tho_id', idsCanThuHoiCaCaNhan)
+          .not('trang_thai_hien_tai', 'in', `(${CAC_TRANG_THAI_DA_XU_LY.join(',')})`);
+      }
+
+      toast.success(editingTo ? 'Cập nhật Tổ thành công!' : 'Tạo Tổ thành công!', { id: toastId });
+      setIsCreatingTo(false);
+      setEditingTo(null);
+      setNewToName('');
+      setNewToMembers([]);
+      setNewToTruongId(null);
+      fetchOverviewData();
+    } catch (error) {
+      toast.error('Có lỗi xảy ra khi lưu Tổ!', { id: toastId });
+    }
+  };
+
+  const handleDeleteTo = async (e, to) => {
+    e.stopPropagation();
+    const soThanhVien = toanBoNhanVien.filter(nv => nv.to_id === to.id).length;
+    if (soThanhVien > 0) {
+      return toast.error(`Tổ "${to.ten_to}" vẫn còn ${soThanhVien} thành viên. Vui lòng chuyển hết thành viên sang Tổ khác trước khi xoá!`, { duration: 5000 });
+    }
+    if (!window.confirm(`Xác nhận xoá Tổ "${to.ten_to}"?`)) return;
+
+    const toastId = toast.loading('Đang xoá Tổ...');
+    try {
+      const { error } = await supabase.from('danh_sach_to').delete().eq('id', to.id);
+      if (error) throw error;
+      toast.success('Đã xoá Tổ!', { id: toastId });
+      fetchOverviewData();
+    } catch (error) {
+      toast.error('Tổ này vẫn còn Nhóm hoặc Ca đốc thu gắn vào, không thể xoá!', { id: toastId });
+    }
+  };
+
   // HÀM: Giao ca vào Giỏ Nhóm
   const handleGiaoCaChoNhom = async (danhSachCa, nhomObj) => {
     const isoNow = new Date().toISOString();
@@ -145,6 +263,8 @@ export default function PhanCongDashboard() {
     try {
       const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
       const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+      // MỚI: ca nào đang đứng "chưa từng thuộc Tổ nào" (to_id NULL) mà đang giao lúc xem 1 Tổ cụ thể -> tự động gắn cứng vào Tổ này luôn
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? danhSachCa.filter(c => !c.to_id).map(c => c.id) : [];
 
       const payloadBase = {
         ten_nhom_phu_trach: nhomObj.ten_nhom,
@@ -160,12 +280,17 @@ export default function PhanCongDashboard() {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
 
       // MỚI: Cập nhật trực tiếp trong bộ nhớ, KHÔNG gọi fetchAllData() nữa -> phản hồi tức thì
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
-        if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, ...payloadBase };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
 
       toast.success(`Xong!`, { id: toastId });
@@ -183,6 +308,7 @@ export default function PhanCongDashboard() {
     try {
       const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
       const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? selectedMicroTasks.filter(id => !danhSach.find(c => c.id === id)?.to_id) : [];
 
       const payloadBase = {
         ten_nhom_phu_trach: nhomNhanObj.ten_nhom,
@@ -198,14 +324,19 @@ export default function PhanCongDashboard() {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ ...payloadBase, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
 
       // MỚI: Cập nhật trực tiếp trong bộ nhớ thay vì tải lại từ server
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, ...payloadBase };
-        if (caBaoHenIds.includes(c.id)) return { ...c, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, ...payloadBase };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, ...payloadBase, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
-      
+
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
     } catch (error) {
@@ -222,10 +353,20 @@ export default function PhanCongDashboard() {
     setHasSearched(true);
     try {
       // Tìm kiếm thông minh bằng ilike: khớp Mã PE, Số điện thoại hoặc Tên KH
-      const { data, error } = await supabase
+      // Bỏ dấu phẩy/ngoặc khỏi từ khoá trước khi ghép vào câu lọc PostgREST, tránh người dùng
+      // gõ ký tự đặc biệt để chèn thêm điều kiện lọc ngoài ý muốn (PostgREST filter injection).
+      const tuKhoaAnToan = searchQuery.replace(/[,()]/g, ' ').trim();
+      let historyQuery = supabase
         .from('lich_su_phan_cong')
         .select('*')
-        .or(`ma_pe.ilike.%${searchQuery}%,so_dien_thoai.ilike.%${searchQuery}%,ten_kh.ilike.%${searchQuery}%`)
+        .or(`ma_pe.ilike.%${tuKhoaAnToan}%,so_dien_thoai.ilike.%${tuKhoaAnToan}%,ten_kh.ilike.%${tuKhoaAnToan}%`);
+
+      // Đang xem 1 Tổ cụ thể -> chỉ tra cứu lịch sử của Tổ đó (kèm dữ liệu cũ chưa từng gắn Tổ nào)
+      if (batPhanCongTheoTo && viewingToId) {
+        historyQuery = historyQuery.or(`to_id.eq.${viewingToId},to_id.is.null`);
+      }
+
+      const { data, error } = await historyQuery
         .order('ngay_nap_du_lieu', { ascending: false })
         .limit(50); // Giới hạn 50 kết quả để chống lag nếu gõ từ khóa quá chung chung
 
@@ -244,9 +385,32 @@ export default function PhanCongDashboard() {
   };
   
   // 1. TẢI DỮ LIỆU TỪ SUPABASE
-  const fetchAllData = async () => {
-    setLoading(true);
+  // ngam = true: tải lại âm thầm (không bật skeleton loading) - dùng khi tự làm mới lúc quay lại Tab, giữ nguyên giao diện đang có
+  const fetchAllData = async ({ ngam = false } = {}) => {
+    if (!ngam) setLoading(true);
     try {
+      let userQuery = supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten');
+      let nhomQuery = supabase.from('danh_sach_nhom').select('*').order('ten_nhom');
+      let dsQuery = supabase
+        .from('danh_sach_doc_thu')
+        .select('*')
+        .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
+        .eq('is_active', true);
+
+      // CHỈ áp các luật liên quan Tổ khi tính năng đang BẬT - tắt đi là y hệt app gốc, không sót hành vi nào
+      if (batPhanCongTheoTo) {
+        // Tổ trưởng (la_to_truong) là người ĐI GIAO việc, không phải người NHẬN việc -> loại khỏi danh sách thợ/thành viên nhóm
+        userQuery = userQuery.eq('la_to_truong', false);
+
+        // KHI ĐANG XEM 1 TỔ CỤ THỂ: lọc nhân viên + nhóm đúng theo Tổ đó.
+        // Riêng "Kho Việc" (ca đốc thu) vẫn cho hiện thêm các ca CHƯA từng gắn Tổ nào (to_id NULL - dữ liệu cũ/mới nạp) để Tổ trưởng có thể nhận và tự động gắn Tổ khi giao việc.
+        if (viewingToId) {
+          userQuery = userQuery.eq('to_id', viewingToId);
+          nhomQuery = nhomQuery.eq('to_id', viewingToId);
+          dsQuery = dsQuery.or(`to_id.eq.${viewingToId},to_id.is.null`);
+        }
+      }
+
       // Gộp cả 5 lượt gọi Supabase để chạy SONG SONG cùng lúc bằng Promise.all
       const [
         { data: userData },
@@ -255,15 +419,11 @@ export default function PhanCongDashboard() {
         { data: tienToData },
         { data: dsData, error: dsErr }
       ] = await Promise.all([
-        supabase.from('user_profiles').select('id, ho_ten').eq('role', 'user').order('ho_ten'),
-        supabase.from('danh_sach_nhom').select('*').order('ten_nhom'),
+        userQuery,
+        nhomQuery,
         supabase.from('danh_muc_tram').select('*'),
         supabase.from('danh_muc_ma_xuat_tuyen').select('*'),
-        supabase
-          .from('danh_sach_doc_thu')
-          .select('*')
-          .in('trang_thai_hien_tai', ['chua_xu_ly', 'hen_lai', 'da_thu', 'da_chuyen_cat_dien', 'da_chuyen_xac_minh', 'da_bao_hen', 'loi_dong_bo_kd'])
-          .eq('is_active', true)
+        dsQuery
       ]);
 
       if (dsErr) throw dsErr;
@@ -276,13 +436,71 @@ export default function PhanCongDashboard() {
     } catch (error) {
       toast.error('Lỗi kết nối cơ sở dữ liệu!');
     } finally {
-      setLoading(false);
+      if (!ngam) setLoading(false);
     }
   };
 
+  // HÀM: Tải danh sách Tổ + TOÀN BỘ nhân viên (không lọc) - dùng cho màn Tổng quan Tổ của Admin
+  const fetchOverviewData = async ({ ngam = false } = {}) => {
+    if (!ngam) setLoading(true);
+    try {
+      const [{ data: toData }, { data: allUsers }] = await Promise.all([
+        supabase.from('danh_sach_to').select('*').order('ten_to'),
+        supabase.from('user_profiles').select('id, ho_ten, to_id, la_to_truong').eq('role', 'user').order('ho_ten')
+      ]);
+      setDanhSachTo(toData || []);
+      setToanBoNhanVien(allUsers || []);
+    } catch (error) {
+      toast.error('Lỗi kết nối cơ sở dữ liệu!');
+    } finally {
+      if (!ngam) setLoading(false);
+    }
+  };
+
+  // Tải cờ bật/tắt tính năng Phân Công Theo Tổ (chạy 1 lần khi mở Tab)
   useEffect(() => {
-    fetchAllData();
+    supabase.from('cau_hinh_he_thong').select('bat_phan_cong_theo_to').eq('id', 1).single()
+      .then(({ data }) => {
+        setBatPhanCongTheoTo(data?.bat_phan_cong_theo_to || false);
+        setDangTaiCauHinh(false);
+      });
   }, []);
+
+  // Điều phối: tuỳ đang ở màn Tổng quan Tổ hay màn Phân Công chi tiết mà tải đúng bộ dữ liệu tương ứng
+  useEffect(() => {
+    if (dangTaiCauHinh) return;
+    if (dangOTongQuan) fetchOverviewData();
+    else fetchAllData();
+  }, [dangTaiCauHinh, dangOTongQuan, viewingToId]);
+
+  // Luôn tải sẵn danh sách Tổ khi tính năng đang bật (kể cả khi Admin nhảy thẳng vào Chi Tiết nhờ nhớ vị trí cũ,
+  // không đi qua màn Tổng quan) -> để nút "Quay lại tổng quan" luôn hiện đúng tên Tổ, không bị rỗng
+  useEffect(() => {
+    if (!batPhanCongTheoTo) return;
+    supabase.from('danh_sach_to').select('*').order('ten_to').then(({ data }) => setDanhSachTo(data || []));
+  }, [batPhanCongTheoTo]);
+
+  // Tab này giờ được giữ "sống" ngầm thay vì gỡ/tạo lại mỗi lần đổi Tab (xem App.jsx) -> tự âm thầm làm mới
+  // dữ liệu mỗi khi quay lại Tab (không phải lần mount đầu tiên), giữ nguyên toàn bộ giao diện đang có
+  const tungActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !tungActiveRef.current && !dangTaiCauHinh) {
+      if (dangOTongQuan) fetchOverviewData({ ngam: true });
+      else fetchAllData({ ngam: true });
+    }
+    tungActiveRef.current = isActive;
+  }, [isActive]);
+
+  // Dọn sạch các state tạm (giỏ đang mở, ca đang tick, popup...) mỗi khi đổi Tổ đang xem
+  // -> tránh còn sót tham chiếu/dữ liệu của Tổ trước đó khi Đội trưởng chuyển qua lại giữa các Tổ
+  useEffect(() => {
+    setActiveWorkerCart(null);
+    setActiveGroupCart(null);
+    setSelectedMicroTasks([]);
+    setSelectedUnassignedIds([]);
+    setAssignPopup(null);
+    setExpandedGroups({});
+  }, [viewingToId]);
 
   // HÀM HỖ TRỢ: RỬA SỐ TRỤ
   const extractAndFixPole = (address, tuyenGoc) => {
@@ -383,17 +601,20 @@ export default function PhanCongDashboard() {
             so_tien: isNaN(cleanTien) ? 0 : cleanTien,
             nhom_phan_cong: nhomPhanCong,  
             ma_tru_sach: maTruSach,        
-            trang_thai_hien_tai: 'chua_xu_ly', 
-            nguoi_phu_trach: null
+            trang_thai_hien_tai: 'chua_xu_ly',
+            nguoi_phu_trach: null,
+            to_id: (batPhanCongTheoTo && viewingToId) ? viewingToId : null
           };
         }).filter(item => item.ma_pe);
 
         if (danhSachNhap.length === 0) return toast.error('File Excel trống!');
 
         // === TRẠM KIỂM SOÁT KÉP: CHẶN TRÙNG LẶP MÃ PE TRÊN TOÀN HỆ THỐNG ===
-        
-        // Lấy TOÀN BỘ mã PE đang hoạt động trên hệ thống (Bao gồm cả tồn đọng cũ VÀ ca đã giao cho NV)
-        const cacMaPEHienTai = danhSach.map(c => c.ma_pe.toUpperCase().trim());
+
+        // Lấy TOÀN BỘ mã PE đang hoạt động trên TOÀN HỆ THỐNG (không lọc theo Tổ - vì `danhSach` trong bộ nhớ
+        // giờ chỉ chứa ca của Tổ đang xem, nếu đối chiếu bằng danhSach sẽ bỏ sót ca trùng ở Tổ khác)
+        const { data: activeRows } = await supabase.from('danh_sach_doc_thu').select('ma_pe').eq('is_active', true);
+        const cacMaPEHienTai = (activeRows || []).map(c => c.ma_pe.toUpperCase().trim());
 
         // Đối chiếu danh sách Excel mới xem có ông nào dính vào hệ thống không
         const danhSachMaTrùng = danhSachNhap
@@ -596,6 +817,7 @@ export default function PhanCongDashboard() {
     try {
       const caThuongIds = danhSachCa.filter(c => c.trang_thai_hien_tai !== 'da_bao_hen').map(c => c.id);
       const caBaoHenIds = danhSachCa.filter(c => c.trang_thai_hien_tai === 'da_bao_hen').map(c => c.id);
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? danhSachCa.filter(c => !c.to_id).map(c => c.id) : [];
 
       if (caThuongIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
@@ -603,11 +825,16 @@ export default function PhanCongDashboard() {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
-      
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
+
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoObj.ho_ten, tho_id: thoObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
       toast.success(`Xong!`, { id: toastId });
     } catch (error) {
@@ -625,6 +852,7 @@ export default function PhanCongDashboard() {
     try {
       const caThuongIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai !== 'da_bao_hen');
       const caBaoHenIds = selectedMicroTasks.filter(id => danhSach.find(c => c.id === id)?.trang_thai_hien_tai === 'da_bao_hen');
+      const idsCanGanTo = (batPhanCongTheoTo && viewingToId) ? selectedMicroTasks.filter(id => !danhSach.find(c => c.id === id)?.to_id) : [];
 
       if (caThuongIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow }).in('id', caThuongIds).eq('is_active', true);
@@ -632,11 +860,16 @@ export default function PhanCongDashboard() {
       if (caBaoHenIds.length > 0) {
         await supabase.from('danh_sach_doc_thu').update({ nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' }).in('id', caBaoHenIds).eq('is_active', true);
       }
-      
+      if (idsCanGanTo.length > 0) {
+        await supabase.from('danh_sach_doc_thu').update({ to_id: viewingToId }).in('id', idsCanGanTo);
+      }
+
       setDanhSach(prev => prev.map(c => {
-        if (caThuongIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow };
-        if (caBaoHenIds.includes(c.id)) return { ...c, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
-        return c;
+        let updated = c;
+        if (caThuongIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow };
+        if (caBaoHenIds.includes(c.id)) updated = { ...updated, nguoi_phu_trach: thoNhanObj.ho_ten, tho_id: thoNhanObj.id, ngay_nap_du_lieu: isoNow, trang_thai_hien_tai: 'hen_lai' };
+        if (idsCanGanTo.includes(c.id)) updated = { ...updated, to_id: viewingToId };
+        return updated;
       }));
       setSelectedMicroTasks([]);
       toast.success(`Thành công!`, { id: toastId });
@@ -648,9 +881,11 @@ export default function PhanCongDashboard() {
   // 5. ĐẶC QUYỀN ĐỘI TRƯỞNG (ĐÃ TÁCH RA THÀNH HÀM ĐỘC LẬP CHUẨN CÚ PHÁP)
   const handleDoiTruongXuLyTonDong = async (ca, hanhDong) => {
     const tenHanhDong = hanhDong === 'da_thu' ? 'ĐÃ THU' : 'CẮT ĐIỆN';
+    // Ghi đúng tên người thao tác thay vì gắn cứng "ĐỘI TRƯỞNG" - vì giờ nhiều Tổ trưởng khác nhau đều dùng chung nút này
+    const tenNguoiThaoTac = profile?.ho_ten || 'ĐỘI TRƯỞNG';
     if (!window.confirm(`Xác nhận chốt ca này thành: ${tenHanhDong}?`)) return;
 
-    const toastId = toast.loading(`Đội trưởng đang xử lý: ${tenHanhDong}...`);
+    const toastId = toast.loading(`Đang xử lý: ${tenHanhDong}...`);
     try {
       if (hanhDong === 'da_chuyen_cat_dien') {
         const { data: checkKhList } = await supabase.from('customers').select('id, trang_thai').eq('ma_pe', ca.ma_pe).limit(1);
@@ -659,7 +894,7 @@ export default function PhanCongDashboard() {
         const blockStatuses = ['cho_xac_minh', 'cho_cat_dien', 'da_cat'];
         
         if (checkKh && blockStatuses.includes(checkKh.trang_thai)) {
-          await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: 'ĐỘI TRƯỞNG' }).eq('id', ca.id);
+          await supabase.from('danh_sach_doc_thu').update({ trang_thai_hien_tai: 'loi_dong_bo_kd', nguoi_phu_trach: tenNguoiThaoTac }).eq('id', ca.id);
           toast('⚠️ Khách đã có lệnh bên Điều Hành. Chuyển sang Lỗi KD!', { id: toastId, style: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' } });
           fetchAllData();
           return;
@@ -674,7 +909,7 @@ export default function PhanCongDashboard() {
           ly_do_ngung: 'no_cuoc',
           trang_thai: 'da_cat', 
           ngay_cat: new Date().toISOString(),
-          ghi_chu: `(Đội trưởng ép lệnh trực tiếp từ Tồn Đọng)`
+          ghi_chu: `(${tenNguoiThaoTac} đã kiểm tra, thực hiện chuyển từ Phân Công)`
         };
 
         let newCustomerId = null;
@@ -689,31 +924,210 @@ export default function PhanCongDashboard() {
         if (newCustomerId) {
           await supabase.from('suspension_logs').insert([{
             customer_id: newCustomerId,
-            hanh_dong: 'Đội trưởng ép lệnh',
-            noi_dung: `Đội trưởng đã xác minh khách Hẹn Lại KHÔNG ĐÓNG. Yêu cầu CẮT ĐIỆN!`
+            hanh_dong: `${tenNguoiThaoTac} chuyển từ Phân Công`,
+            noi_dung: `${tenNguoiThaoTac} đã kiểm tra, thực hiện chuyển từ Phân Công sang CẮT ĐIỆN (khách hẹn lại nhưng không đóng).`
           }]);
         }
       }
 
       await supabase.from('danh_sach_doc_thu')
-        .update({ 
-          trang_thai_hien_tai: hanhDong, 
-          nguoi_phu_trach: 'ĐỘI TRƯỞNG', 
-          ngay_nap_du_lieu: new Date().toISOString() 
+        .update({
+          trang_thai_hien_tai: hanhDong,
+          nguoi_phu_trach: tenNguoiThaoTac,
+          ngay_nap_du_lieu: new Date().toISOString()
         })
         .eq('id', ca.id);
 
       toast.success(`Đã chốt: ${tenHanhDong}`, { id: toastId });
-      fetchAllData(); 
+      fetchAllData();
     } catch (error) {
       toast.error('Lỗi khi xử lý!', { id: toastId });
     }
   };
 
+  // ================= MÀN CHỜ TẢI CẤU HÌNH (TRÁNH CHỚP GIAO DIỆN LÚC MỞ TAB) =================
+  if (dangTaiCauHinh) {
+    return (
+      <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center text-blue-500">
+          <i className="fa-solid fa-circle-notch animate-spin text-4xl mb-3"></i>
+          <p className="font-bold text-xs animate-pulse">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= MÀN TỔNG QUAN CÁC TỔ (CHỈ ADMIN, KHI TÍNH NĂNG PHÂN CÔNG THEO TỔ ĐANG BẬT) =================
+  if (dangOTongQuan) {
+    return (
+      <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 fade-in relative">
+        <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
+          <div>
+            <h2 className="font-black text-lg text-slate-800 tracking-tight">TỔNG QUAN <span className="text-purple-600">CÁC TỔ</span></h2>
+            <p className="text-[10px] text-slate-500 font-bold uppercase">{danhSachTo.length} Tổ đang hoạt động</p>
+          </div>
+          <button
+            onClick={() => { setEditingTo(null); setNewToName(''); setNewToMembers([]); setNewToTruongId(null); setIsCreatingTo(true); }}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all"
+          >
+            <i className="fa-solid fa-plus mr-1"></i> Tạo Tổ
+          </button>
+        </div>
+
+        <div className="p-3 space-y-3">
+          {loading ? (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 text-center text-slate-400">
+              <i className="fa-solid fa-circle-notch animate-spin text-2xl"></i>
+            </div>
+          ) : danhSachTo.length === 0 ? (
+            <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-400">
+              <i className="fa-solid fa-people-roof text-3xl mb-2"></i>
+              <p className="text-xs font-bold uppercase">Chưa có Tổ nào được lập</p>
+              <p className="text-[10px] mt-1">Bấm "Tạo Tổ" ở trên để bắt đầu chia nhân sự theo Tổ.</p>
+            </div>
+          ) : (
+            danhSachTo.map(to => {
+              const thanhVienCuaTo = toanBoNhanVien.filter(nv => nv.to_id === to.id);
+              const toTruong = thanhVienCuaTo.find(nv => nv.la_to_truong);
+              return (
+                <div key={to.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-black text-slate-800 text-sm">{to.ten_to}</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {thanhVienCuaTo.length} nhân viên{toTruong ? ` · Tổ trưởng: ${toTruong.ho_ten}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          setEditingTo(to);
+                          setNewToName(to.ten_to);
+                          setNewToMembers(thanhVienCuaTo.map(nv => nv.id));
+                          setNewToTruongId(toTruong?.id || null);
+                          setIsCreatingTo(true);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-blue-500 hover:text-white transition-colors"
+                        title="Sửa Tổ / Quản lý thành viên"
+                      >
+                        <i className="fa-solid fa-pen text-[10px]"></i>
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteTo(e, to)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-rose-500 hover:text-white transition-colors"
+                        title="Xoá Tổ"
+                      >
+                        <i className="fa-solid fa-trash-can text-[10px]"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setViewingToId(to.id); setDangXemChiTiet(true); }}
+                    className="w-full py-2 bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-700 rounded-lg text-xs font-black transition-colors"
+                  >
+                    Xem chi tiết <i className="fa-solid fa-arrow-right ml-1"></i>
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* ================= MODAL TẠO / SỬA TỔ ================= */}
+        {isCreatingTo && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 fade-in backdrop-blur-sm">
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl slide-up max-h-[90vh] flex flex-col">
+              <div className="p-4 border-b border-slate-100 bg-purple-50 flex justify-between items-center shrink-0">
+                <h3 className="font-black text-purple-800 uppercase flex items-center gap-2 text-sm">
+                  <i className={`fa-solid ${editingTo ? 'fa-pen-to-square' : 'fa-people-roof'}`}></i>
+                  {editingTo ? 'Hiệu Chỉnh Tổ' : 'Tạo Tổ Mới'}
+                </h3>
+                <button onClick={() => { setIsCreatingTo(false); setEditingTo(null); setNewToName(''); setNewToMembers([]); setNewToTruongId(null); }} className="text-slate-400 hover:text-rose-500 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm transition-colors">
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveTo} className="p-4 space-y-4 overflow-y-auto">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tên Tổ</label>
+                  <input
+                    type="text"
+                    value={newToName}
+                    onChange={(e) => setNewToName(e.target.value)}
+                    placeholder="Ví dụ: Tổ 1, Tổ Khu Vực A..."
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-bold text-slate-700"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Chọn thành viên (Đã chọn: {newToMembers.length})</label>
+                  <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto pr-1 no-scrollbar">
+                    {(() => {
+                      // Chỉ hiện nhân viên CHƯA thuộc Tổ nào khác + nhân viên đang thuộc chính Tổ này (nếu đang sửa)
+                      const nvHienThi = toanBoNhanVien.filter(nv => !nv.to_id || nv.to_id === editingTo?.id);
+                      if (nvHienThi.length === 0) return <div className="text-center text-xs text-rose-500 font-bold p-3 bg-rose-50 rounded-lg">Không còn nhân viên nào rảnh (chưa thuộc Tổ khác)!</div>;
+
+                      return nvHienThi.map(nv => {
+                        const isSelected = newToMembers.includes(nv.id);
+                        return (
+                          <div key={nv.id} className={`flex items-center justify-between gap-2 p-2.5 border rounded-xl transition-colors select-none ${isSelected ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'bg-white border-slate-200'}`}>
+                            <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                                {isSelected && <i className="fa-solid fa-check text-[10px]"></i>}
+                              </div>
+                              <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-purple-700' : 'text-slate-600'}`}>{nv.ho_ten}</span>
+                              <input type="checkbox" className="hidden" checked={isSelected} onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewToMembers([...newToMembers, nv.id]);
+                                } else {
+                                  setNewToMembers(newToMembers.filter(id => id !== nv.id));
+                                  if (newToTruongId === nv.id) setNewToTruongId(null);
+                                }
+                              }} />
+                            </label>
+                            {isSelected && (
+                              <button
+                                type="button"
+                                onClick={() => setNewToTruongId(newToTruongId === nv.id ? null : nv.id)}
+                                className={`shrink-0 text-[9px] font-black px-2 py-1 rounded-full uppercase transition-colors ${newToTruongId === nv.id ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600'}`}
+                              >
+                                <i className="fa-solid fa-star mr-1"></i>Tổ trưởng
+                              </button>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl text-sm shadow-md active:scale-95 transition-all uppercase tracking-wider">
+                    {editingTo ? 'CẬP NHẬT TỔ' : 'KHỞI TẠO TỔ'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen pb-24 flex flex-col fade-in relative">
       <div className="bg-white px-4 py-3 border-b border-slate-200 sticky top-0 z-30 shadow-sm flex justify-between items-center">
         <div className="flex flex-col gap-1.5">
+          {/* NÚT QUAY LẠI TỔNG QUAN TỔ - CHỈ ADMIN, KHI TÍNH NĂNG THEO TỔ ĐANG BẬT VÀ ĐÃ VÀO XEM 1 TỔ CỤ THỂ */}
+          {batPhanCongTheoTo && isAdmin && dangXemChiTiet && (
+            <button
+              onClick={() => { setDangXemChiTiet(false); }}
+              className="flex items-center gap-1.5 text-[10px] font-black text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg px-2 py-1 w-max transition-colors"
+            >
+              <i className="fa-solid fa-arrow-left"></i> Quay lại tổng quan · {danhSachTo.find(t => t.id === viewingToId)?.ten_to || 'Tổ'}
+            </button>
+          )}
           {/* CÔNG TẮC CHUYỂN ĐỔI NHƯ MỘT TAB CHÍNH */}
           <div className="flex bg-slate-100 p-0.5 rounded-lg w-max shadow-inner border border-slate-200">
             <button 

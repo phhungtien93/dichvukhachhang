@@ -55,16 +55,17 @@ const fetchProfile = async (userId) => {
       const access = profile.tabs_access || [];
       let isAllowed = false;
       
-      if (activeTab === 'phancong' && access.includes('app_phan_cong')) isAllowed = true;
+      // Tab Phân Công không còn cấp qua checkbox phân quyền nữa -> chỉ Tổ trưởng (la_to_truong) mới có quyền
+      if (activeTab === 'phancong' && profile.la_to_truong) isAllowed = true;
       if (activeTab === 'nhanviec' && access.includes('app_nhan_viec')) isAllowed = true;
       if (activeTab === 'danhsach' && access.includes('app_dieu_hanh')) isAllowed = true;
       if (activeTab === 'thongke' && access.includes('app_thong_ke')) isAllowed = true;
 
       // Nếu đang đứng ở Tab không có quyền -> Tự động chuyển qua Tab hợp lệ đầu tiên
-      if (!isAllowed && access.length > 0) {
+      if (!isAllowed && (access.length > 0 || profile.la_to_truong)) {
         if (access.includes('app_nhan_viec')) setActiveTab('nhanviec');
         else if (access.includes('app_dieu_hanh')) setActiveTab('danhsach');
-        else if (access.includes('app_phan_cong')) setActiveTab('phancong');
+        else if (profile.la_to_truong) setActiveTab('phancong');
         else if (access.includes('app_thong_ke')) setActiveTab('thongke');
       }
     }
@@ -73,11 +74,19 @@ const fetchProfile = async (userId) => {
   // KIỂM TRA QUYỀN ĐỂ ẨN/HIỆN NÚT BẤM DƯỚI ĐÁY MÀN HÌNH
   const isAdmin = profile?.role === 'admin';
   const access = profile?.tabs_access || [];
-  
-  const canPhanCong = isAdmin || access.includes('app_phan_cong');
+
+  // Tab Phân Công: chỉ Admin hoặc Tổ trưởng (la_to_truong) mới thấy - không còn cấp qua phân quyền tabs_access
+  const canPhanCong = isAdmin || profile?.la_to_truong === true;
   const canNhanViec = isAdmin || access.includes('app_nhan_viec');
   const canDieuHanh = isAdmin || access.includes('app_dieu_hanh');
   const canThongKe = isAdmin || access.includes('app_thong_ke');
+
+  // GIỮ TAB "SỐNG" NGẦM: Tab nào đã từng mở trong phiên này thì giữ nguyên (chỉ ẩn/hiện bằng CSS),
+  // không gỡ hẳn khỏi cây React nữa -> đổi Tab qua lại không bị mất trạng thái (như F5)
+  const [tabsDaMo, setTabsDaMo] = useState(() => new Set([activeTab]));
+  useEffect(() => {
+    setTabsDaMo(prev => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
+  }, [activeTab]);
 
   // MỚI: Đang kiểm tra session ban đầu -> hiện màn hình chờ, TRÁNH chớp login form
 if (checkingSession || (session && !isProfileLoaded)) {
@@ -187,11 +196,28 @@ if (!session) {
           </div>
         )}
 
-        {/* Chỉ truyền Component khi có quyền, tránh render trộm */}
-        {activeTab === 'phancong' && canPhanCong && <PhanCongDashboard session={session} profile={profile} />}
-        {activeTab === 'nhanviec' && canNhanViec && <GiaoDienTho session={session} profile={profile} />}
-        {activeTab === 'danhsach' && canDieuHanh && <QuanLyDanhSach session={session} profile={profile} />}
-        {activeTab === 'thongke' && canThongKe && <ThongKeDashboard session={session} profile={profile} />}
+        {/* Chỉ mount Component khi có quyền VÀ Tab đã từng được mở; sau đó giữ nguyên, chỉ ẩn/hiện bằng CSS
+            (không gỡ khỏi cây React nữa) để đổi Tab qua lại giữ nguyên toàn bộ trạng thái đang có */}
+        {tabsDaMo.has('phancong') && canPhanCong && (
+          <div className={activeTab === 'phancong' ? 'contents' : 'hidden'}>
+            <PhanCongDashboard session={session} profile={profile} isActive={activeTab === 'phancong'} />
+          </div>
+        )}
+        {tabsDaMo.has('nhanviec') && canNhanViec && (
+          <div className={activeTab === 'nhanviec' ? 'contents' : 'hidden'}>
+            <GiaoDienTho session={session} profile={profile} isActive={activeTab === 'nhanviec'} />
+          </div>
+        )}
+        {tabsDaMo.has('danhsach') && canDieuHanh && (
+          <div className={activeTab === 'danhsach' ? 'contents' : 'hidden'}>
+            <QuanLyDanhSach session={session} profile={profile} />
+          </div>
+        )}
+        {tabsDaMo.has('thongke') && canThongKe && (
+          <div className={activeTab === 'thongke' ? 'contents' : 'hidden'}>
+            <ThongKeDashboard session={session} profile={profile} isActive={activeTab === 'thongke'} />
+          </div>
+        )}
       </div>
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-x border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-[60] rounded-t-xl fade-in">
@@ -212,7 +238,7 @@ if (!session) {
           )}
           
           {canDieuHanh && (
-            <button onClick={() => setActiveTab('danhsach')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+            <button id="btn-tab-dieu-hanh" onClick={() => setActiveTab('danhsach')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'danhsach' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
               <i className={`text-xl mb-1 ${activeTab === 'danhsach' ? 'fa-solid fa-clipboard-list' : 'fa-solid fa-list'}`}></i>
               <span className="text-[10px] font-bold uppercase tracking-wide">Điều Hành</span>
             </button>

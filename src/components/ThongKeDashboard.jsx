@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 
-export default function ThongKeDashboard() {
+export default function ThongKeDashboard({ isActive = true }) {
   const today = new Date();
   const tzOffset = today.getTimezoneOffset() * 60000;
   const todayStr = new Date(today.getTime() - tzOffset).toISOString().split('T')[0];
@@ -26,8 +26,9 @@ export default function ThongKeDashboard() {
   const [dsNangSuat, setDsNangSuat] = useState([]);
   const [detailModal, setDetailModal] = useState({ isOpen: false, title: '', type: '', data: [] });
 
-  const fetchThongKe = async () => {
-    setLoading(true);
+  // ngam = true: tải lại âm thầm (không bật skeleton loading) - dùng khi tự làm mới lúc quay lại Tab
+  const fetchThongKe = async ({ ngam = false } = {}) => {
+    if (!ngam) setLoading(true);
     try {
       // 1. TẢI TOÀN BỘ HỒ SƠ ĐỂ XEM BỨC TRANH LƯỚI ĐIỆN HIỆN TẠI (LIVE SNAPSHOT)
       const { data: customersData, error: cError } = await supabase.from('customers').select('*');
@@ -92,7 +93,7 @@ export default function ThongKeDashboard() {
     } catch (error) {
       toast.error('Lỗi tải dữ liệu thống kê');
     } finally {
-      setLoading(false);
+      if (!ngam) setLoading(false);
     }
   };
 
@@ -112,6 +113,14 @@ export default function ThongKeDashboard() {
     if (denNgay) localStorage.setItem('evn_tk_den_ngay', denNgay);
     if (tuNgay && denNgay) fetchThongKe();
   }, [tuNgay, denNgay]);
+
+  // Tab này được giữ "sống" ngầm thay vì gỡ/tạo lại mỗi lần đổi Tab (xem App.jsx) -> tự âm thầm làm mới
+  // dữ liệu mỗi khi quay lại Tab (không phải lần mount đầu tiên), giữ nguyên toàn bộ giao diện đang có
+  const tungActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !tungActiveRef.current && tuNgay && denNgay) fetchThongKe({ ngam: true });
+    tungActiveRef.current = isActive;
+  }, [isActive]);
 
   return (
     <div className="w-full max-w-md mx-auto p-3 space-y-4 pb-24 fade-in">

@@ -1,19 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'react-hot-toast';
 
-export default function GiaoDienTho({ session, profile }) {
+export default function GiaoDienTho({ session, profile, isActive = true }) {
   // Thay thế trạng thái giả lập bằng dữ liệu thực từ props truyền vào
   const thoHienTai = profile?.ho_ten || 'Nhân viên';
-  
+
   const [dsCa, setDsCa] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('chua_lam'); 
+  const [activeTab, setActiveTab] = useState('chua_lam');
   const [selectedGroupTasks, setSelectedGroupTasks] = useState([]); // Biến quản lý hộp kiểm (checkbox) chọn ca nhóm
 
-  const fetchData = async () => {
-    if (!profile?.id) return; 
-    setLoading(true);
+  // ngam = true: tải lại âm thầm (không bật skeleton loading) - dùng khi tự làm mới lúc quay lại Tab
+  const fetchData = async ({ ngam = false } = {}) => {
+    if (!profile?.id) return;
+    if (!ngam) setLoading(true);
     try {
       const todayMidnight = new Date();
       todayMidnight.setHours(0, 0, 0, 0);
@@ -31,15 +32,23 @@ export default function GiaoDienTho({ session, profile }) {
       
     } catch (error) {
       console.error("Chi tiết lỗi Supabase:", error);
-      toast.error(`Lỗi DB: ${error.message}`); 
+      toast.error(`Lỗi DB: ${error.message}`);
     } finally {
-      setLoading(false);
+      if (!ngam) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
   }, [profile?.id]);
+
+  // Tab này được giữ "sống" ngầm thay vì gỡ/tạo lại mỗi lần đổi Tab (xem App.jsx) -> tự âm thầm làm mới
+  // dữ liệu mỗi khi quay lại Tab (không phải lần mount đầu tiên), giữ nguyên toàn bộ giao diện đang có
+  const tungActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !tungActiveRef.current) fetchData({ ngam: true });
+    tungActiveRef.current = isActive;
+  }, [isActive]);
 
   // ==========================================
   // SỰ THAY ĐỔI LỚN 2: PHÂN LOẠI GIỎ VIỆC THEO TAB

@@ -90,6 +90,7 @@ export default function QuanLyDanhSach({ session, profile }) {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('user');
   const [selectedTabsAccess, setSelectedTabsAccess] = useState(['cho_cat', 'da_cat', 'dinh_ky', 'hoan_tat']);
+  const [batPhanCongTheoTo, setBatPhanCongTheoTo] = useState(false); // Cờ toàn hệ thống: bật tính năng Phân Công Theo Tổ
 
   // ================= DỮ LIỆU KHÁCH HÀNG =================
   const [customers, setCustomers] = useState([]);
@@ -178,6 +179,26 @@ export default function QuanLyDanhSach({ session, profile }) {
 
   useEffect(() => { if (viewMode === 'admin' && profile?.role === 'admin') fetchUsersList(); }, [viewMode]);
 
+  // ================= CẤU HÌNH TOÀN HỆ THỐNG (BẬT/TẮT PHÂN CÔNG THEO TỔ) =================
+  useEffect(() => {
+    if (viewMode === 'admin' && profile?.role === 'admin') {
+      supabase.from('cau_hinh_he_thong').select('bat_phan_cong_theo_to').eq('id', 1).single()
+        .then(({ data }) => setBatPhanCongTheoTo(data?.bat_phan_cong_theo_to || false));
+    }
+  }, [viewMode]);
+
+  const handleToggleTinhNangTo = async () => {
+    const giaTriMoi = !batPhanCongTheoTo;
+    setBatPhanCongTheoTo(giaTriMoi); // cập nhật ngay giao diện, phản hồi tức thì
+    const { error } = await supabase.from('cau_hinh_he_thong').update({ bat_phan_cong_theo_to: giaTriMoi }).eq('id', 1);
+    if (error) {
+      setBatPhanCongTheoTo(!giaTriMoi); // rollback nếu lỗi
+      toast.error('Lỗi khi lưu cấu hình!');
+    } else {
+      toast.success(giaTriMoi ? 'Đã BẬT Phân Công Theo Tổ!' : 'Đã TẮT Phân Công Theo Tổ!');
+    }
+  };
+
   const handleToggleTabPermission = (tabId) => {
     if (selectedTabsAccess.includes(tabId)) setSelectedTabsAccess(selectedTabsAccess.filter(id => id !== tabId));
     else setSelectedTabsAccess([...selectedTabsAccess, tabId]);
@@ -196,13 +217,17 @@ export default function QuanLyDanhSach({ session, profile }) {
     const { data: authData, error: authError } = await supabase.auth.signUp({ email: newUserEmail, password: newUserPassword });
     if (authError) { toast.error('Lỗi tạo tài khoản: ' + authError.message); setLoading(false); return; } 
 
+    // QUAN TRỌNG: signUp() tự động chuyển session hiện tại của trình duyệt sang tài khoản VỪA TẠO.
+    // Phải khôi phục lại session Admin TRƯỚC khi insert user_profiles, nếu không insert sẽ chạy dưới
+    // quyền tài khoản mới (chưa phải admin) và bị chặn bởi RLS "Chỉ Admin được tạo tài khoản".
+    if (currentAdminSession) await supabase.auth.setSession(currentAdminSession);
+
     if (authData?.user) {
       const accessRights = newUserRole === 'admin' ? ['cho_xac_minh', 'cho_cat', 'da_cat', 'dinh_ky', 'hoan_tat'] : selectedTabsAccess;
       const { error: profileError } = await supabase.from('user_profiles').insert([{ id: authData.user.id, email: newUserEmail, ho_ten: newUserName.trim(), role: newUserRole, tabs_access: accessRights }]);
       if (profileError) toast.error('Lỗi phân quyền: ' + profileError.message);
       else toast.success(`Khởi tạo thành công: ${newUserName.trim()}`);
     }
-    if (currentAdminSession) await supabase.auth.setSession(currentAdminSession);
     setAdminView('list'); fetchUsersList(); setLoading(false);
   };
 
@@ -615,6 +640,19 @@ export default function QuanLyDanhSach({ session, profile }) {
         {/* ================= KHU VỰC QUẢN TRỊ ADMIN ================= */}
         {viewMode === 'admin' && profile?.role === 'admin' && (
           <div className="fade-in space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><i className="fa-solid fa-people-roof text-purple-500"></i> Phân Công Theo Tổ</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Chia nhân sự thành nhiều Tổ độc lập, mỗi Tổ tự quản lý phân công riêng.</p>
+              </div>
+              <button
+                onClick={handleToggleTinhNangTo}
+                className={`shrink-0 w-12 h-7 rounded-full transition-colors relative p-0 border-0 ${batPhanCongTheoTo ? 'bg-purple-600' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute left-0 top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${batPhanCongTheoTo ? 'translate-x-6' : 'translate-x-1'}`}></span>
+              </button>
+            </div>
+
             <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1.5 gap-1">
               <button onClick={() => setAdminView('list')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminView === 'list' ? 'bg-amber-500 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><i className="fa-solid fa-list-ul mr-1.5"></i> Danh sách NV</button>
               <button onClick={() => { setAdminView('create'); resetAdminForm(); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminView === 'create' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><i className="fa-solid fa-user-plus mr-1.5"></i> Cấp tài khoản</button>
@@ -671,11 +709,7 @@ export default function QuanLyDanhSach({ session, profile }) {
                 {newUserRole === 'user' && (
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 fade-in">
                     <label className="block text-xs font-bold text-slate-600 uppercase mb-2 border-b border-slate-200 pb-2">Hệ Thống Phân Quyền Phân Hệ</label>
-
-                    <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
-                      <input type="checkbox" checked={selectedTabsAccess.includes('app_phan_cong')} onChange={() => handleToggleTabPermission('app_phan_cong')} className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="font-bold text-slate-700 text-sm"><i className="fa-solid fa-users-gear text-blue-500 w-5 text-center"></i> Điều Phối (Đội trưởng)</span>
-                    </label>
+                    <p className="text-[10px] text-slate-400 -mt-1 mb-1 italic">Tab Phân Công không cấp ở đây nữa — chỉ Tổ trưởng (gán trong Tab Phân Công) mới có quyền vào.</p>
 
                     <label className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 shadow-sm transition-colors">
                       <input type="checkbox" checked={selectedTabsAccess.includes('app_nhan_viec')} onChange={() => handleToggleTabPermission('app_nhan_viec')} className="w-4 h-4 text-amber-600 rounded" />
@@ -996,7 +1030,14 @@ export default function QuanLyDanhSach({ session, profile }) {
                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 border-b pb-1">Mảng Nghiệp Vụ Giấy Tờ / Tài Chính</h4>
                  {customerInfo?.trang_thai === 'cho_xac_minh' && (
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => openActionModal('vp_xac_minh_ok', 'Xác minh OK - Gạch nợ')} className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all"><i className="fa-solid fa-circle-check text-lg"></i> <span className="text-[10px] uppercase">Xác Minh OK</span></button>
+                      <button
+                        onClick={() => openActionModal('vp_xac_minh_ok', 'Xác minh OK - Gạch nợ')}
+                        disabled={customerInfo?.chua_thay_dinh_ky}
+                        className={`w-full font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all border ${customerInfo?.chua_thay_dinh_ky ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                      >
+                        <i className={`fa-solid ${customerInfo?.chua_thay_dinh_ky ? 'fa-lock' : 'fa-circle-check'} text-lg`}></i>
+                        <span className="text-[10px] uppercase">{customerInfo?.chua_thay_dinh_ky ? 'Chờ thay ĐK' : 'Xác Minh OK'}</span>
+                      </button>
                       <button onClick={() => openActionModal('vp_yeu_cau_cat', 'Từ chối hoãn - Chỉ thị cắt')} className="w-full bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all"><i className="fa-solid fa-triangle-exclamation text-lg"></i> <span className="text-[10px] uppercase">Chuyển lệnh cắt</span></button>
                     </div>
                  )}
@@ -1022,12 +1063,18 @@ export default function QuanLyDanhSach({ session, profile }) {
                         <i className="fa-solid fa-money-bill-transfer text-base"></i> Khách chuyển khoản (Có Bill)
                       </button>
 
-                      {/* Nút 3: Đã thanh toán (Nợ = 0) (Màu xanh ngọc pastel) */}
-                      <button 
-                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')} 
-                        className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+                      {/* Nút 3: Đã thanh toán (Nợ = 0) (Màu xanh ngọc pastel) - khoá nếu còn nợ thay điện kế định kỳ,
+                          để tránh khách thoát khỏi luồng cắt điện mà chưa từng bị bắt buộc thay công tơ */}
+                      <button
+                        onClick={() => handleXuLyHienTruong(customerInfo.id, customerInfo.ten_kh, 'dang_su_dung')}
+                        disabled={customerInfo?.chua_thay_dinh_ky}
+                        className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all border ${customerInfo?.chua_thay_dinh_ky ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
                       >
-                        <i className="fa-solid fa-circle-check text-base"></i> Xác nhận Đã Đóng Tiền Cước
+                        {customerInfo?.chua_thay_dinh_ky ? (
+                          <><i className="fa-solid fa-lock"></i> Phải Thay Điện Kế trước khi hủy lệnh cắt</>
+                        ) : (
+                          <><i className="fa-solid fa-circle-check text-base"></i> Xác nhận Đã Đóng Tiền Cước</>
+                        )}
                       </button>
 
                       {/* Nút 4: Báo trở ngại (Màu tím pastel - Đã chỉnh lại py-3.5 cho đều nhau) */}
